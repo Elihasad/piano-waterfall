@@ -1,4 +1,4 @@
-import type { MeasureEvent, NoteEvent, Song } from './types';
+import type { MeasureEvent, NoteEvent, Song } from '../core/types';
 
 function buildDemoSong(params: {
   id: string;

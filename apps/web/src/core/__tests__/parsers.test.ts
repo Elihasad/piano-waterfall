@@ -122,7 +122,10 @@ describe('MusicXML & MIDI parsers', () => {
     lh.addNote({ midi: 48, time: 0, duration: 1.0, velocity: 0.7 });
 
     const bytes = midi.toArray();
-    const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    const buffer = bytes.buffer.slice(
+      bytes.byteOffset,
+      bytes.byteOffset + bytes.byteLength,
+    ) as ArrayBuffer;
     const song = parseMidiBuffer(buffer, 'My Midi');
     expect(song.title).toBe('My Midi');
     expect(song.sourceFormat).toBe('midi');
