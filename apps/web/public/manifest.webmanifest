@@ -1,0 +1,19 @@
+{
+  "name": "Piano Waterfall",
+  "short_name": "PianoWaterfall",
+  "description": "Tập đàn piano kiểu thác nước với tên nốt C, D, E từ MusicXML, MIDI & PDF",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "theme_color": "#121216",
+  "background_color": "#121216",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
