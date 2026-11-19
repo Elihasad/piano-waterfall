@@ -45,5 +45,6 @@ describe('App integration', () => {
     const fileInput = screen.getByLabelText(/Tải bản nhạc lên/i) as HTMLInputElement;
     expect(fileInput.accept).toContain('.musicxml');
     expect(fileInput.accept).toContain('.pdf');
+    expect(fileInput.accept).toContain('*/*');
   });
 });

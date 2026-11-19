@@ -131,8 +131,14 @@ export class PianoSynth implements NotePlayer {
       stop: () => {
         try {
           const t = ctx.currentTime;
-          noteGain.gain.cancelScheduledValues(t);
-          noteGain.gain.setValueAtTime(Math.max(0.0001, noteGain.gain.value), t);
+          const param = noteGain.gain as AudioParam & { cancelAndHoldAtTime?: (time: number) => void };
+          if (typeof param.cancelAndHoldAtTime === 'function') {
+            param.cancelAndHoldAtTime(t);
+          } else {
+            const currentVal = Math.max(0.0001, noteGain.gain.value);
+            noteGain.gain.cancelScheduledValues(t);
+            noteGain.gain.setValueAtTime(currentVal, t);
+          }
           noteGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
           osc1.stop(t + 0.06);
           osc2.stop(t + 0.06);

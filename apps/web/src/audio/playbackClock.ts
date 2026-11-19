@@ -171,6 +171,14 @@ export class PlaybackClock {
     if (this.loopEnabled) {
       const { startSec, endSec } = this.getLoopBounds();
       const loopLen = Math.max(0.05, endSec - startSec);
+      if (prevTime >= endSec) {
+        // Playhead was already past loop end when loop was enabled: jump cleanly to loop start
+        nextTime = startSec + Math.min(deltaSongSec, loopLen);
+        this.triggerNotesInWindow(startSec, nextTime);
+        this.currentTimeSec = nextTime;
+        this.cursorTimeSec = nextTime;
+        return this.getSnapshot();
+      }
       if (nextTime >= endSec) {
         this.triggerNotesInWindow(startWindow, endSec);
         const overflow = (nextTime - endSec) % loopLen;

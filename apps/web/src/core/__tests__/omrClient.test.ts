@@ -15,6 +15,11 @@ describe('omrClient', () => {
     expect(mixed.ok).toBe(false);
     expect(mixed.error).toMatch(/HTTPS/i);
 
+    const mixedUpper = validateOmrUrl('HTTP://192.168.1.5:8000', 'https:');
+    expect(mixedUpper.ok).toBe(false);
+    expect(mixedUpper.error).toMatch(/HTTPS/i);
+    expect(mixedUpper.error).toMatch(/OMR/i);
+
     expect(validateOmrUrl('https://my-omr.hf.space', 'https:').ok).toBe(true);
     expect(validateOmrUrl('http://192.168.1.5:8000', 'http:').ok).toBe(true);
   });
@@ -96,6 +101,38 @@ describe('omrClient', () => {
       fetchMock.mock.calls.some(
         ([url, init]) =>
           String(url).includes('/api/jobs/job-99') && (init as RequestInit)?.method === 'DELETE',
+      ),
+    ).toBe(true);
+  });
+
+  it('surfaces friendly OMR error on network failure and cancels job on in-flight abort', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new TypeError('Failed to fetch')));
+    const file = new File(['%PDF-1.4'], 'net.pdf', { type: 'application/pdf' });
+    await expect(
+      convertPdfWithProgress('https://omr.example.com', file, () => {}, undefined, 10),
+    ).rejects.toThrow(/Không thể kết nối tới máy chủ OMR/i);
+
+    const controller = new AbortController();
+    const abortErr = new DOMException('Aborted', 'AbortError');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ jobId: 'job-abort', totalPages: 3 }), { status: 200 }),
+      )
+      .mockImplementationOnce(async () => {
+        controller.abort();
+        throw abortErr;
+      })
+      .mockResolvedValueOnce(new Response(JSON.stringify({ status: 'cancelled' }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(
+      convertPdfWithProgress('https://omr.example.com', file, () => {}, controller.signal, 10),
+    ).rejects.toThrow(/hủy/i);
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).includes('/api/jobs/job-abort') && (init as RequestInit)?.method === 'DELETE',
       ),
     ).toBe(true);
   });

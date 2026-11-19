@@ -229,6 +229,7 @@ export default function App() {
         song={currentSong}
         clock={clock}
         player={player}
+        transpose={snapshot.transpose}
         noteLabelMode={settings.noteLabelMode}
         showKeyLabels={settings.showKeyLabels}
         effectsEnabled={settings.effectsEnabled}

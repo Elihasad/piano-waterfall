@@ -27,11 +27,11 @@ export function validateOmrUrl(
       error: 'URL máy chủ OMR phải bắt đầu bằng https:// hoặc http://',
     };
   }
-  if (pageProtocol === 'https:' && clean.startsWith('http://')) {
+  if (pageProtocol === 'https:' && clean.toLowerCase().startsWith('http://')) {
     return {
       ok: false,
       error:
-        'Trình duyệt HTTPS (đặc biệt iOS Safari) chặn kết nối http:// không bảo mật. Hãy dùng địa chỉ HTTPS (như Hugging Face Spaces hoặc Cloudflare Tunnel).',
+        'Trình duyệt HTTPS (đặc biệt iOS Safari) chặn kết nối máy chủ OMR qua http:// không bảo mật. Hãy dùng địa chỉ HTTPS (như Hugging Face Spaces hoặc Cloudflare Tunnel).',
     };
   }
   return { ok: true };
@@ -78,11 +78,21 @@ export async function convertPdfWithProgress(
   const formData = new FormData();
   formData.append('file', file);
 
-  const startRes = await fetch(`${clean}/api/jobs`, {
-    method: 'POST',
-    body: formData,
-    signal,
-  });
+  let startRes: Response;
+  try {
+    startRes = await fetch(`${clean}/api/jobs`, {
+      method: 'POST',
+      body: formData,
+      signal,
+    });
+  } catch (err) {
+    if (signal?.aborted) {
+      throw new Error('Đã hủy chuyển đổi PDF.');
+    }
+    throw new Error(
+      `Không thể kết nối tới máy chủ OMR (${err instanceof Error ? err.message : 'Network error'}). Hãy kiểm tra lại URL trong Cài đặt.`,
+    );
+  }
   if (!startRes.ok) {
     const text = await startRes.text().catch(() => '');
     throw new Error(`Không thể tải PDF lên máy chủ OMR (HTTP ${startRes.status}): ${text}`);
@@ -108,17 +118,32 @@ export async function convertPdfWithProgress(
       throw new Error('Đã hủy chuyển đổi PDF.');
     }
 
-    const pollRes = await fetch(`${clean}/api/jobs/${encodeURIComponent(jobId)}`, { signal });
+    let pollRes: Response;
+    try {
+      pollRes = await fetch(`${clean}/api/jobs/${encodeURIComponent(jobId)}`, { signal });
+    } catch (err) {
+      if (signal?.aborted) {
+        await cancelRemote();
+        throw new Error('Đã hủy chuyển đổi PDF.');
+      }
+      throw new Error(
+        `Không thể kết nối tới máy chủ OMR khi kiểm tra tiến độ (${err instanceof Error ? err.message : 'Network error'}).`,
+      );
+    }
     if (!pollRes.ok) {
       throw new Error(`Lỗi kiểm tra tiến độ OMR (HTTP ${pollRes.status})`);
     }
     const data = (await pollRes.json()) as {
-      status: 'queued' | 'processing' | 'done' | 'error';
+      status: 'queued' | 'processing' | 'done' | 'error' | 'cancelled';
       currentPage: number;
       totalPages: number;
       musicxml?: string;
       error?: string;
     };
+
+    if (data.status === 'cancelled') {
+      throw new Error('Đã hủy chuyển đổi PDF.');
+    }
 
     onProgress({
       status: data.status,

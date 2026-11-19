@@ -10,6 +10,7 @@ interface PianoStageProps {
   song: Song;
   clock: PlaybackClock;
   player: NotePlayer;
+  transpose: number;
   noteLabelMode: NoteLabelMode;
   showKeyLabels: boolean;
   effectsEnabled: boolean;
@@ -23,6 +24,7 @@ export const PianoStage: React.FC<PianoStageProps> = ({
   song,
   clock,
   player,
+  transpose,
   noteLabelMode,
   showKeyLabels,
   effectsEnabled,
@@ -70,8 +72,8 @@ export const PianoStage: React.FC<PianoStageProps> = ({
     if (fullKeyboard) {
       return { startMidi: MIN_PIANO_MIDI, endMidi: MAX_PIANO_MIDI };
     }
-    return computeAutoKeyRange(song.minMidi, song.maxMidi);
-  }, [fullKeyboard, song.minMidi, song.maxMidi]);
+    return computeAutoKeyRange(song.minMidi + transpose, song.maxMidi + transpose);
+  }, [fullKeyboard, song.minMidi, song.maxMidi, transpose]);
 
   const layout = useMemo(
     () => buildKeyboardLayout(keyRange.startMidi, keyRange.endMidi, size.width, keyboardHeight),

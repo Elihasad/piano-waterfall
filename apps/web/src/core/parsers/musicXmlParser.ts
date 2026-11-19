@@ -68,6 +68,7 @@ export function parseMusicXml(
   let defaultBpm = 120;
   let foundTempo = false;
   let noteCounter = 0;
+  const measureBpmMap = new Map<number, number>();
 
   parts.forEach((partEl, partIndex) => {
     let divisions = 1;
@@ -82,6 +83,9 @@ export function parseMusicXml(
 
     measureEls.forEach((measureEl, mIdx) => {
       const measureNum = mIdx + 1;
+      if (partIndex > 0 && measureBpmMap.has(measureNum)) {
+        currentBpm = measureBpmMap.get(measureNum)!;
+      }
       let cursorTicks = 0;
       let lastNoteStartTicks = 0;
       let maxTicksInMeasure = 0;
@@ -116,6 +120,7 @@ export function parseMusicXml(
             const bpm = Number.parseFloat(tempoAttr);
             if (Number.isFinite(bpm) && bpm > 10 && bpm < 400) {
               currentBpm = bpm;
+              measureBpmMap.set(measureNum, bpm);
               if (!foundTempo) {
                 defaultBpm = bpm;
                 foundTempo = true;
@@ -161,19 +166,25 @@ export function parseMusicXml(
           const durationSec = (durTicks / divisions) * secPerQuarter;
 
           const staffNum = Number.parseInt(getChildText(child, 'staff') || '0', 10);
+          const voice = getChildText(child, 'voice') || '1';
           let hand: Hand;
-          if (stavesCount >= 2 && staffNum > 0) {
-            hand = staffNum === 2 ? 'left' : 'right';
+          if (staffNum === 2) {
+            hand = 'left';
+          } else if (stavesCount >= 2 && staffNum > 0) {
+            hand = 'right';
           } else if (parts.length >= 2) {
             hand = partIndex >= 1 ? 'left' : 'right';
           } else {
             hand = midi < 60 ? 'left' : 'right';
           }
 
-          const tieEls = Array.from(child.getElementsByTagName('tie'));
+          const tieEls = [
+            ...Array.from(child.getElementsByTagName('tie')),
+            ...Array.from(child.getElementsByTagName('tied')),
+          ];
           const hasTieStart = tieEls.some((el) => el.getAttribute('type') === 'start');
           const hasTieStop = tieEls.some((el) => el.getAttribute('type') === 'stop');
-          const tieKey = `${partIndex}:${staffNum || hand}:${midi}`;
+          const tieKey = `${partIndex}:${staffNum || hand}:${voice}:${midi}`;
 
           if (hasTieStop && openTies.has(tieKey)) {
             const existing = openTies.get(tieKey)!;

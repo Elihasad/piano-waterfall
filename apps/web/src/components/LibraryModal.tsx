@@ -100,7 +100,7 @@ export const LibraryModal: React.FC<LibraryModalProps> = ({
             <input
               type="file"
               aria-label="Tải bản nhạc lên"
-              accept=".musicxml,.xml,.mxl,.mid,.midi,.pdf"
+              accept=".musicxml,.xml,.mxl,.mid,.midi,.pdf,*/*"
               disabled={busy}
               onChange={handleFileChange}
               className="hidden"

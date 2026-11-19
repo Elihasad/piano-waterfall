@@ -100,4 +100,17 @@ describe('PlaybackClock', () => {
     clock.stepMeasure(-1);
     expect(clock.getSnapshot().currentTimeSec).toBeCloseTo(0.0, 3);
   });
+
+  it('resets cleanly to loop start when loop is enabled while playhead is already past loop end', () => {
+    const { player, calls } = createFakePlayer();
+    const clock = new PlaybackClock(player);
+    clock.loadSong(TEST_SONG);
+    clock.seek(2.8); // past measure 1 end (2.0s)
+    clock.setLoop(true, 1, 1); // 0s..2s
+    clock.play();
+
+    const snap = clock.advance(0.1);
+    expect(snap.currentTimeSec).toBeCloseTo(0.1, 3);
+    expect(calls.map((c) => c.midi)).toEqual([60, 48]);
+  });
 });

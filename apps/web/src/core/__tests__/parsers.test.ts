@@ -137,4 +137,30 @@ describe('MusicXML & MIDI parsers', () => {
     const file = new File(['hello'], 'notes.txt', { type: 'text/plain' });
     await expect(parseSongFile(file)).rejects.toThrow(/Không hỗ trợ|Unsupported/i);
   });
+
+  it('merges notations/tied notes and respects staff=2 even when staves element is omitted', () => {
+    const xml = `<?xml version="1.0"?>
+      <score-partwise>
+        <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+        <part id="P1">
+          <measure number="1">
+            <attributes><divisions>1</divisions></attributes>
+            <note>
+              <pitch><step>C</step><octave>4</octave></pitch>
+              <duration>2</duration><voice>1</voice><staff>2</staff>
+              <notations><tied type="start"/></notations>
+            </note>
+            <note>
+              <pitch><step>C</step><octave>4</octave></pitch>
+              <duration>2</duration><voice>1</voice><staff>2</staff>
+              <notations><tied type="stop"/></notations>
+            </note>
+          </measure>
+        </part>
+      </score-partwise>`;
+    const song = parseMusicXml(xml, 'Tied Notation');
+    expect(song.notes).toHaveLength(1);
+    expect(song.notes[0].hand).toBe('left');
+    expect(song.notes[0].durationSec).toBeCloseTo(2.0, 3);
+  });
 });
