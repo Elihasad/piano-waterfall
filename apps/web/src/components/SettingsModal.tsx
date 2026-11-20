@@ -41,7 +41,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         className="w-full max-w-md max-h-[90vh] flex flex-col rounded-2xl bg-[#1a1b22] border border-[#2c2e3b] shadow-2xl overflow-hidden"
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#2c2e3b]">
-          <h2 className="text-sm font-bold text-slate-100">{t(language, 'settingsTitle')}</h2>
+          <h2 className="text-sm font-bold text-slate-100">
+            {t(language, 'settingsTitle')}{' '}
+            <span className="text-[11px] font-normal text-slate-400">v2.10</span>
+          </h2>
           <button
             type="button"
             onClick={onClose}
