@@ -1,7 +1,19 @@
-import React, { useState } from 'react';
-import { Upload, Music, Trash2, X, FileText, Loader2, AlertCircle } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import {
+  Upload,
+  Music,
+  Trash2,
+  X,
+  FileText,
+  Loader2,
+  AlertCircle,
+  Sparkles,
+  WifiOff,
+  Settings,
+} from 'lucide-react';
 import { t } from '../core/i18n';
-import { parseSongFile } from '../core/parsers';
+import { convertPdfWithProgress, type OmrProgress } from '../core/omrClient';
+import { parseMusicXml, parseSongFile } from '../core/parsers';
 import { parsePdfOffline } from '../core/parsers/pdfOfflineOmr';
 import type { Language, Song } from '../core/types';
 
@@ -9,9 +21,11 @@ interface LibraryModalProps {
   language: Language;
   songs: Song[];
   currentSongId: string;
+  omrServerUrl: string;
   onSelectSong: (song: Song) => void;
   onImportSong: (song: Song) => Promise<void>;
   onDeleteSong: (id: string) => Promise<void>;
+  onOpenSettings: () => void;
   onClose: () => void;
 }
 
@@ -19,16 +33,19 @@ export const LibraryModal: React.FC<LibraryModalProps> = ({
   language,
   songs,
   currentSongId,
+  omrServerUrl,
   onSelectSong,
   onImportSong,
   onDeleteSong,
+  onOpenSettings,
   onClose,
 }) => {
+  const hasCloudOmr = omrServerUrl.trim().length > 0;
+  const [pdfEngine, setPdfEngine] = useState<'offline' | 'ai'>(hasCloudOmr ? 'ai' : 'offline');
   const [error, setError] = useState<string | null>(null);
-  const [pdfProgress, setPdfProgress] = useState<{ currentPage: number; totalPages: number } | null>(
-    null,
-  );
+  const [omrProgress, setOmrProgress] = useState<OmrProgress | null>(null);
   const [busy, setBusy] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -39,11 +56,33 @@ export const LibraryModal: React.FC<LibraryModalProps> = ({
     setBusy(true);
     try {
       if (file.name.toLowerCase().endsWith('.pdf')) {
-        setPdfProgress({ currentPage: 1, totalPages: 1 });
-        const song = await parsePdfOffline(file, (p) => setPdfProgress(p));
-        await onImportSong(song);
-        onSelectSong(song);
-        onClose();
+        if (pdfEngine === 'ai' && hasCloudOmr) {
+          const controller = new AbortController();
+          abortRef.current = controller;
+          setOmrProgress({ status: 'queued', currentPage: 0, totalPages: 0 });
+          const xmlText = await convertPdfWithProgress(
+            omrServerUrl,
+            file,
+            (p) => setOmrProgress(p),
+            controller.signal,
+          );
+          const song = parseMusicXml(xmlText, file.name, 'pdf');
+          await onImportSong(song);
+          onSelectSong(song);
+          onClose();
+        } else {
+          setOmrProgress({ status: 'processing', currentPage: 1, totalPages: 1 });
+          const song = await parsePdfOffline(file, (p) =>
+            setOmrProgress({
+              status: 'processing',
+              currentPage: p.currentPage,
+              totalPages: p.totalPages,
+            }),
+          );
+          await onImportSong(song);
+          onSelectSong(song);
+          onClose();
+        }
       } else {
         const song = await parseSongFile(file);
         await onImportSong(song);
@@ -51,9 +90,15 @@ export const LibraryModal: React.FC<LibraryModalProps> = ({
         onClose();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to import sheet music.');
+      const msg = err instanceof Error ? err.message : 'Failed to import sheet music.';
+      if (msg.includes('dynamically imported module')) {
+        setError('A new version was deployed. Please refresh the page (F5) and try again.');
+      } else {
+        setError(msg);
+      }
     } finally {
-      setPdfProgress(null);
+      abortRef.current = null;
+      setOmrProgress(null);
       setBusy(false);
     }
   };
@@ -79,6 +124,44 @@ export const LibraryModal: React.FC<LibraryModalProps> = ({
 
         {/* Upload Zone */}
         <div className="p-3 border-b border-[#2c2e3b] space-y-2">
+          {/* PDF Engine Mode Switcher */}
+          <div className="flex items-center justify-between gap-2 text-[11px]">
+            <span className="text-slate-400 font-semibold">PDF Mode:</span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setPdfEngine('offline')}
+                className={`px-2.5 py-1 rounded-lg font-semibold flex items-center gap-1 transition ${
+                  pdfEngine === 'offline'
+                    ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/50'
+                    : 'bg-[#242632] text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <WifiOff className="w-3 h-3" />
+                Offline Fast
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!hasCloudOmr) {
+                    onClose();
+                    onOpenSettings();
+                  } else {
+                    setPdfEngine('ai');
+                  }
+                }}
+                className={`px-2.5 py-1 rounded-lg font-semibold flex items-center gap-1 transition ${
+                  pdfEngine === 'ai' && hasCloudOmr
+                    ? 'bg-violet-600/35 text-violet-200 border border-violet-500/60'
+                    : 'bg-[#242632] text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Sparkles className="w-3 h-3" />
+                {hasCloudOmr ? 'AI OMR (Best)' : 'Setup AI OMR'}
+              </button>
+            </div>
+          </div>
+
           <label className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl border-2 border-dashed border-violet-500/50 bg-violet-950/20 hover:bg-violet-950/35 cursor-pointer transition">
             <Upload className="w-4 h-4 text-violet-300" />
             <span className="text-xs font-semibold text-violet-200">
@@ -95,20 +178,31 @@ export const LibraryModal: React.FC<LibraryModalProps> = ({
           </label>
           <p className="text-[11px] text-slate-400 leading-relaxed">{t(language, 'pdfOfflineHint')}</p>
 
-          {pdfProgress && (
+          {omrProgress && (
             <div className="rounded-xl bg-[#121216] border border-[#2c2e3b] p-3 space-y-2">
               <div className="flex items-center justify-between text-xs text-cyan-300">
                 <span className="flex items-center gap-1.5">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  {`${t(language, 'pdfOfflineReading')}: ${t(language, 'pdfPageProgress')} ${pdfProgress.currentPage}/${pdfProgress.totalPages}...`}
+                  {pdfEngine === 'ai' && hasCloudOmr
+                    ? `${t(language, 'pdfCloudReading')}: ${t(language, 'pdfPageProgress')} ${omrProgress.currentPage}/${omrProgress.totalPages || '?'}...`
+                    : `${t(language, 'pdfOfflineReading')}: ${t(language, 'pdfPageProgress')} ${omrProgress.currentPage}/${omrProgress.totalPages}...`}
                 </span>
+                {pdfEngine === 'ai' && hasCloudOmr && (
+                  <button
+                    type="button"
+                    onClick={() => abortRef.current?.abort()}
+                    className="text-rose-400 hover:underline font-semibold"
+                  >
+                    {t(language, 'cancel')}
+                  </button>
+                )}
               </div>
-              {pdfProgress.totalPages > 0 && (
+              {omrProgress.totalPages > 0 && (
                 <div className="w-full h-1.5 bg-[#242632] rounded-full overflow-hidden">
                   <div
                     className="h-full bg-cyan-400 transition-all"
                     style={{
-                      width: `${Math.min(100, Math.round((pdfProgress.currentPage / pdfProgress.totalPages) * 100))}%`,
+                      width: `${Math.min(100, Math.round((omrProgress.currentPage / omrProgress.totalPages) * 100))}%`,
                     }}
                   />
                 </div>
@@ -119,7 +213,21 @@ export const LibraryModal: React.FC<LibraryModalProps> = ({
           {error && (
             <div className="rounded-xl bg-rose-950/40 border border-rose-500/40 p-2.5 text-xs text-rose-200 flex items-start gap-2">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
-              <p className="flex-1">{error}</p>
+              <div className="flex-1 space-y-1">
+                <p>{error}</p>
+                {error.includes('OMR') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenSettings();
+                    }}
+                    className="inline-flex items-center gap-1 text-cyan-300 underline font-semibold"
+                  >
+                    <Settings className="w-3 h-3" /> {t(language, 'openOmrSettings')}
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>

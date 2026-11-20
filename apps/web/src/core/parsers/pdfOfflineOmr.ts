@@ -42,6 +42,18 @@ const SMUFL_NATURAL = '\uE261';
 const SMUFL_SHARP = '\uE262';
 const SMUFL_AUG_DOT = '\uE1E7';
 const SMUFL_PEDAL = '\uE650';
+const SMUFL_OTTAVA_8VA = '\uE510';
+const SMUFL_OTTAVA_15MA = '\uE514';
+const SMUFL_DYNAMICS: Record<string, number> = {
+  '\uE52A': 0.32, // ppp
+  '\uE52B': 0.42, // pp
+  '\uE520': 0.54, // p
+  '\uE52C': 0.64, // mp
+  '\uE52D': 0.76, // mf
+  '\uE522': 0.88, // f
+  '\uE52F': 0.96, // ff
+  '\uE530': 1.0,  // fff
+};
 const SMUFL_RESTS = new Set(['\uE4E3', '\uE4E4', '\uE4E5', '\uE4E6', '\uE4E7']);
 const SMUFL_FLAGS_8TH = new Set(['\uE240', '\uE241']);
 const SMUFL_FLAGS_16TH = new Set(['\uE242', '\uE243']);
@@ -176,6 +188,8 @@ export function extractNotesFromSmuflItems(
     (g) => SMUFL_FLAGS_8TH.has(g.ch) || SMUFL_FLAGS_16TH.has(g.ch) || SMUFL_FLAGS_32ND.has(g.ch),
   );
   const pedalGlyphs = glyphs.filter((g) => g.ch === SMUFL_PEDAL);
+  const ottavaGlyphs = glyphs.filter((g) => g.ch === SMUFL_OTTAVA_8VA || g.ch === SMUFL_OTTAVA_15MA);
+  const dynamicGlyphs = glyphs.filter((g) => g.ch in SMUFL_DYNAMICS);
   const timeDigitGlyphs = glyphs.filter(
     (g) => g.ch in SMUFL_TIME_DIGITS || g.ch === SMUFL_TIME_COMMON || g.ch === SMUFL_TIME_CUT,
   );
@@ -302,6 +316,9 @@ export function extractNotesFromSmuflItems(
   interface SmuflParsedNote {
     x: number;
     y: number;
+    diatonic: number;
+    inlineAccidental: number | null; // -1 | 0 | +1 if explicitly marked left of notehead
+    keyAccidental: number;
     midi: number;
     hand: Hand;
     kind: 'whole' | 'half' | 'black';
@@ -372,7 +389,8 @@ export function extractNotesFromSmuflItems(
     const diatonic = anchorDiatonic + stepsFromAnchor;
     const degree = ((diatonic % 7) + 7) % 7;
 
-    let accOffset = st.keyAccidentals.get(degree) ?? 0;
+    const keyAccidental = st.keyAccidentals.get(degree) ?? 0;
+    let inlineAccidental: number | null = null;
     const inlineAcc = accidentals.find(
       (a) =>
         a.x < ng.x &&
@@ -381,9 +399,10 @@ export function extractNotesFromSmuflItems(
         a.x > st.x + st.fontSize * 1.2,
     );
     if (inlineAcc) {
-      accOffset =
+      inlineAccidental =
         inlineAcc.ch === SMUFL_FLAT ? -1 : inlineAcc.ch === SMUFL_SHARP ? 1 : 0;
     }
+    const accOffset = inlineAccidental !== null ? inlineAccidental : keyAccidental;
 
     const hasDot = augDots.some(
       (d) =>
@@ -438,7 +457,18 @@ export function extractNotesFromSmuflItems(
     const exactBeats = hasDot ? baseBeats * 1.5 : baseBeats;
 
     const arr = systemNotesMap.get(bestSysIdx) ?? [];
-    arr.push({ x: ng.x, y: ng.y, midi, hand: st.hand, kind, hasDot, exactBeats });
+    arr.push({
+      x: ng.x,
+      y: ng.y,
+      diatonic,
+      inlineAccidental,
+      keyAccidental,
+      midi,
+      hand: st.hand,
+      kind,
+      hasDot,
+      exactBeats,
+    });
     systemNotesMap.set(bestSysIdx, arr);
   }
 
@@ -453,6 +483,8 @@ export function extractNotesFromSmuflItems(
   let curMeasure = startMeasureNumber;
   let idCounter = 0;
 
+  let currentDynamicVel = 0.76; // carries across systems until next dynamic glyph (p, mf, f, ff...)
+
   systems.forEach((sys, sIdx) => {
     const sysNotes = systemNotesMap.get(sIdx);
     if (!sysNotes || sysNotes.length === 0) return;
@@ -463,7 +495,8 @@ export function extractNotesFromSmuflItems(
     // Tight chord clustering so consecutive repeated 16th notes are NOT swallowed as one chord
     const clusterTol = Math.max(2.5, fontSize * 0.16);
 
-    // Determine system bottom bound to match pedal marks
+    // Determine system vertical bounds to match pedal marks, ottavas (8va/15ma), and dynamics
+    const sysTopY = Math.max(...sys.map((st) => st.anchorY));
     const sysBotY = Math.min(...sys.map((st) => st.anchorY)) - fontSize * 0.8;
     const firstContentX = Math.min(
       sysNotes[0].x,
@@ -477,6 +510,39 @@ export function extractNotesFromSmuflItems(
     const sysPedals = pedalGlyphs
       .filter((p) => p.y < sysBotY + fontSize * 0.5 && p.y > sysBotY - fontSize * 2.5)
       .sort((a, b) => a.x - b.x);
+
+    const sysOttavas = ottavaGlyphs
+      .filter((o) => o.y >= sysTopY + fontSize * 0.4 && o.y <= sysTopY + fontSize * 3.5)
+      .sort((a, b) => a.x - b.x);
+
+    const sysDynamics = dynamicGlyphs
+      .filter((d) => d.y >= sysBotY - fontSize * 1.2 && d.y <= sysTopY + fontSize * 1.2)
+      .sort((a, b) => a.x - b.x);
+
+    const getDynamicAtX = (x: number, hand: Hand, beatOffset: number): number => {
+      let vel = currentDynamicVel;
+      for (const d of sysDynamics) {
+        if (d.x <= x + fontSize * 0.6) {
+          vel = SMUFL_DYNAMICS[d.ch] ?? vel;
+        } else {
+          break;
+        }
+      }
+      const handScale = hand === 'left' ? 0.84 : 1.0;
+      const downbeatBoost = beatOffset < 0.05 ? 0.06 : 0;
+      return Math.max(0.25, Math.min(1.0, vel * handScale + downbeatBoost));
+    };
+
+    const getOttavaShiftAtX = (x: number, hand: Hand, measureEndX: number): number => {
+      if (hand !== 'right' || sysOttavas.length === 0) return 0;
+      for (let i = sysOttavas.length - 1; i >= 0; i--) {
+        const o = sysOttavas[i];
+        if (o.x <= x + fontSize * 0.4 && x <= measureEndX) {
+          return o.ch === SMUFL_OTTAVA_15MA ? 24 : 12;
+        }
+      }
+      return 0;
+    };
 
     // Find REAL vertical barlines belonging to this system (strictly rejecting note stems!)
     const rawBarXs: number[] = [];
@@ -585,6 +651,7 @@ export function extractNotesFromSmuflItems(
           const mSpan = Math.max(1, mb.xEnd - firstEvX);
 
           let cumBeat = 0;
+          const measureAccMap = new Map<number, number>(); // diatonic pitch -> measure-scoped accidental
           events.forEach((ev, evIdx) => {
             let beatOffset: number;
             if (exactFit) {
@@ -606,8 +673,20 @@ export function extractNotesFromSmuflItems(
 
               const seenMidis = new Set<number>();
               for (const item of ev.notes) {
-                if (seenMidis.has(item.midi)) continue;
-                seenMidis.add(item.midi);
+                // Apply measure-scoped accidental persistence
+                if (item.inlineAccidental !== null) {
+                  measureAccMap.set(item.diatonic, item.inlineAccidental);
+                }
+                const effectiveAcc = measureAccMap.has(item.diatonic)
+                  ? measureAccMap.get(item.diatonic)!
+                  : item.keyAccidental;
+                const ottavaShift = getOttavaShiftAtX(item.x, hand, mb.xEnd);
+                const resolvedMidi = clampMidi(
+                  diatonicWithAccidentalToMidi(item.diatonic, effectiveAcc) + ottavaShift,
+                );
+
+                if (seenMidis.has(resolvedMidi)) continue;
+                seenMidis.add(resolvedMidi);
                 let durBeats = exactFit
                   ? item.exactBeats
                   : item.kind === 'whole' || item.kind === 'half'
@@ -618,10 +697,10 @@ export function extractNotesFromSmuflItems(
                 }
                 emittedNotes.push({
                   id: `smufl-${curMeasure}-${idCounter++}`,
-                  midi: item.midi,
+                  midi: resolvedMidi,
                   startTimeSec: mStartSec + beatOffset * secPerBeat,
                   durationSec: Math.max(0.15, durBeats * secPerBeat),
-                  velocity: hand === 'left' ? 0.68 : 0.82,
+                  velocity: getDynamicAtX(item.x, hand, beatOffset),
                   hand,
                   measureNumber: curMeasure,
                   pdfX: item.x,
@@ -664,23 +743,42 @@ export function extractNotesFromSmuflItems(
 
       const clusterBeats = clusters.map((c) => quantizeBeat(c.x));
       let maxEndBeat = beatsPerMeasure;
+      const fallbackAccMaps = new Map<string, Map<number, number>>(); // `${measureOffset}-${hand}` -> diatonic -> acc
 
       clusters.forEach((cluster, cIdx) => {
         const beatStart = clusterBeats[cIdx];
         const noteStart = curTime + beatStart * secPerBeat;
         const measureOffset = Math.floor(beatStart / beatsPerMeasure);
+        const beatInMeasure = beatStart - measureOffset * beatsPerMeasure;
         const seenMidis = new Set<number>();
 
         for (const item of cluster.items) {
-          if (seenMidis.has(item.midi)) continue;
-          seenMidis.add(item.midi);
+          const accKey = `${measureOffset}-${item.hand}`;
+          let accMap = fallbackAccMaps.get(accKey);
+          if (!accMap) {
+            accMap = new Map<number, number>();
+            fallbackAccMaps.set(accKey, accMap);
+          }
+          if (item.inlineAccidental !== null) {
+            accMap.set(item.diatonic, item.inlineAccidental);
+          }
+          const effectiveAcc = accMap.has(item.diatonic)
+            ? accMap.get(item.diatonic)!
+            : item.keyAccidental;
+          const ottavaShift = getOttavaShiftAtX(item.x, item.hand, lastContentX + fontSize);
+          const resolvedMidi = clampMidi(
+            diatonicWithAccidentalToMidi(item.diatonic, effectiveAcc) + ottavaShift,
+          );
+
+          if (seenMidis.has(resolvedMidi)) continue;
+          seenMidis.add(resolvedMidi);
           maxEndBeat = Math.max(maxEndBeat, beatStart + item.exactBeats);
           emittedNotes.push({
             id: `smufl-${curMeasure}-${idCounter++}`,
-            midi: item.midi,
+            midi: resolvedMidi,
             startTimeSec: noteStart,
             durationSec: item.exactBeats * secPerBeat,
-            velocity: item.hand === 'left' ? 0.68 : 0.82,
+            velocity: getDynamicAtX(item.x, item.hand, beatInMeasure),
             hand: item.hand,
             measureNumber: curMeasure + measureOffset,
             pdfX: item.x,
@@ -707,6 +805,11 @@ export function extractNotesFromSmuflItems(
 
       curTime += systemMeasures * beatsPerMeasure * secPerBeat;
       curMeasure += systemMeasures;
+    }
+
+    if (sysDynamics.length > 0) {
+      const lastDyn = sysDynamics[sysDynamics.length - 1];
+      currentDynamicVel = SMUFL_DYNAMICS[lastDyn.ch] ?? currentDynamicVel;
     }
   });
 

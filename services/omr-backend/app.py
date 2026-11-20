@@ -73,8 +73,11 @@ def create_app(engine: Optional[OmrEngine] = None) -> FastAPI:
                 job.status = "done"
         except Exception as exc:  # noqa: BLE001
             with lock:
-                job.error = str(exc)
-                job.status = "error"
+                if job.cancelled:
+                    job.status = "cancelled"
+                else:
+                    job.error = str(exc)
+                    job.status = "error"
         finally:
             try:
                 if os.path.exists(job.pdf_path):

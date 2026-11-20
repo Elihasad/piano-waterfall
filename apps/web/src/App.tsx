@@ -317,9 +317,11 @@ export default function App() {
           language={settings.language}
           songs={songs}
           currentSongId={currentSong.id}
+          omrServerUrl={settings.omrServerUrl}
           onSelectSong={selectSong}
           onImportSong={handleImportSong}
           onDeleteSong={handleDeleteSong}
+          onOpenSettings={() => setShowSettings(true)}
           onClose={() => setShowLibrary(false)}
         />
       )}

@@ -197,4 +197,33 @@ describe('pdfVectorExtractor & vector-assisted SMuFL OMR', () => {
     const res = extractNotesFromSmuflItems(items, 1, 0, 74);
     expect(res.notes.map((n) => n.midi)).toEqual([97, 95]);
   });
+
+  it('applies 8va ottava (+12), measure-scoped accidentals, and pp/ff dynamic velocities', () => {
+    const items: SmuflTextItem[] = [
+      { str: '\uE050', x: 50, y: 700, fontSize: 24 },
+      // Dynamics: pp at start, ff later
+      { str: '\uE52B', x: 100, y: 685, fontSize: 24 }, // pp
+      { str: '\uE52F', x: 175, y: 685, fontSize: 24 }, // ff
+      // 8va glyph above treble staff starting at x=175
+      { str: '\uE510', x: 175, y: 735, fontSize: 20 },
+      // Sharp on G4 (y=700) at x=105 -> G#4 (MIDI 68)
+      { str: '\uE262', x: 96, y: 700, fontSize: 24 },
+      { str: '\uE0A4', x: 105, y: 700, fontSize: 24 },
+      // Second G4 in SAME measure at x=140 (NO inline sharp) -> must stay G#4 (MIDI 68)!
+      { str: '\uE0A4', x: 140, y: 700, fontSize: 24 },
+      // Third G4 under 8va + ff at x=180 -> G#5 (MIDI 80) with much louder velocity!
+      { str: '\uE0A4', x: 180, y: 700, fontSize: 24 },
+    ];
+    const geom: VectorGeometry = {
+      barlines: [{ x: 250, yMin: 694, yMax: 718 }],
+      beams: [],
+      ties: [],
+    };
+    const res = extractNotesFromSmuflItems(items, 1, 0, 100, geom);
+    expect(res.notes).toHaveLength(3);
+    expect(res.notes[0].midi).toBe(68); // G#4
+    expect(res.notes[1].midi).toBe(68); // measure-scoped G#4!
+    expect(res.notes[2].midi).toBe(80); // 8va G#5!
+    expect(res.notes[2].velocity).toBeGreaterThan(res.notes[0].velocity + 0.3); // ff >> pp!
+  });
 });

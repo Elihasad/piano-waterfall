@@ -2,6 +2,11 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# Hugging Face Spaces runs as non-root uid 1000; keep caches writable in /tmp
+ENV HOME=/tmp
+ENV XDG_CACHE_HOME=/tmp/.cache
+ENV HF_HOME=/tmp/.cache/huggingface
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
