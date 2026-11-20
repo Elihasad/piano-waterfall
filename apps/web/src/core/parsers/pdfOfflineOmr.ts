@@ -1,5 +1,6 @@
 import { clampMidi } from '../noteNames';
 import type { Hand, MeasureEvent, NoteEvent, Song } from '../types';
+import { extractVectorGeometryFromOps, type VectorGeometry } from './pdfVectorExtractor';
 
 export interface DetectedStaff {
   linesY: [number, number, number, number, number];
@@ -31,7 +32,21 @@ const SMUFL_FLAT = '\uE260';
 const SMUFL_NATURAL = '\uE261';
 const SMUFL_SHARP = '\uE262';
 const SMUFL_AUG_DOT = '\uE1E7';
+const SMUFL_PEDAL = '\uE650';
 const SMUFL_RESTS = new Set(['\uE4E3', '\uE4E4', '\uE4E5', '\uE4E6', '\uE4E7']);
+const SMUFL_FLAGS_8TH = new Set(['\uE240', '\uE241']);
+const SMUFL_FLAGS_16TH = new Set(['\uE242', '\uE243']);
+const SMUFL_FLAGS_32ND = new Set(['\uE244', '\uE245']);
+const SMUFL_TIME_DIGITS: Record<string, number> = {
+  '\uE082': 2,
+  '\uE083': 3,
+  '\uE084': 4,
+  '\uE085': 5,
+  '\uE086': 6,
+  '\uE087': 7,
+  '\uE088': 8,
+  '\uE089': 9,
+};
 
 function diatonicWithAccidentalToMidi(diatonic: number, accidentalOffset: number): number {
   const octave = Math.floor(diatonic / 7);
@@ -49,6 +64,7 @@ export function extractNotesFromSmuflItems(
   startMeasureNumber: number,
   startTimeSec: number,
   defaultBpm = 100,
+  geometry?: VectorGeometry,
 ): {
   notes: NoteEvent[];
   measures: MeasureEvent[];
@@ -127,6 +143,11 @@ export function extractNotesFromSmuflItems(
   );
   const augDots = glyphs.filter((g) => g.ch === SMUFL_AUG_DOT);
   const restGlyphs = glyphs.filter((g) => SMUFL_RESTS.has(g.ch));
+  const flagGlyphs = glyphs.filter(
+    (g) => SMUFL_FLAGS_8TH.has(g.ch) || SMUFL_FLAGS_16TH.has(g.ch) || SMUFL_FLAGS_32ND.has(g.ch),
+  );
+  const pedalGlyphs = glyphs.filter((g) => g.ch === SMUFL_PEDAL);
+  const timeDigitGlyphs = glyphs.filter((g) => g.ch in SMUFL_TIME_DIGITS);
   const noteGlyphs = glyphs.filter(
     (g) => g.ch === SMUFL_NOTE_BLACK || g.ch === SMUFL_NOTE_HALF || g.ch === SMUFL_NOTE_WHOLE,
   );
@@ -195,13 +216,39 @@ export function extractNotesFromSmuflItems(
     }
   }
 
+  // Detect time signature (default 4/4) from stacked SMuFL digits near first clef
+  let timeBeats = 4;
+  let timeBeatType = 4;
+  if (staves.length > 0 && timeDigitGlyphs.length >= 2) {
+    const firstStaff = staves[0];
+    const nearClefDigits = timeDigitGlyphs
+      .filter(
+        (d) =>
+          d.x > firstStaff.x &&
+          d.x - firstStaff.x < firstStaff.fontSize * 4.2 &&
+          Math.abs(d.y - firstStaff.anchorY) < firstStaff.fontSize * 1.1,
+      )
+      .sort((a, b) => b.y - a.y); // higher Y = numerator, lower Y = denominator
+    if (nearClefDigits.length >= 2) {
+      const num = SMUFL_TIME_DIGITS[nearClefDigits[0].ch];
+      const den = SMUFL_TIME_DIGITS[nearClefDigits[1].ch];
+      if (num && den) {
+        timeBeats = num;
+        timeBeatType = den;
+      }
+    }
+  }
+  const beatsPerMeasure = timeBeats * (4 / timeBeatType);
+
   // Assign each notehead and rest to its closest staff vertically
   interface SmuflParsedNote {
     x: number;
+    y: number;
     midi: number;
     hand: Hand;
     kind: 'whole' | 'half' | 'black';
     hasDot: boolean;
+    exactBeats: number; // exact rhythmic duration from head + beams/flags + dot
   }
   const systemNotesMap = new Map<number, SmuflParsedNote[]>();
   const systemRestsMap = new Map<number, Array<{ x: number; hand: Hand; beats: number }>>();
@@ -223,10 +270,13 @@ export function extractNotesFromSmuflItems(
     if (bestSysIdx < 0 || !bestStaff) continue;
     const st: SmuflStaff = bestStaff;
     if (rg.x < st.x + st.fontSize * 0.5) continue;
-    const restBeats =
-      rg.ch === '\uE4E3' ? 4 : rg.ch === '\uE4E4' ? 2 : rg.ch === '\uE4E5' ? 1 : rg.ch === '\uE4E6' ? 0.5 : 0.25;
+    const restHasDot = augDots.some(
+      (d) => d.x > rg.x && d.x - rg.x < st.fontSize * 0.9 && Math.abs(d.y - rg.y) < st.stepPx * 2.0,
+    );
+    const baseRest =
+      rg.ch === '\uE4E3' ? beatsPerMeasure : rg.ch === '\uE4E4' ? 2 : rg.ch === '\uE4E5' ? 1 : rg.ch === '\uE4E6' ? 0.5 : 0.25;
     const arr = systemRestsMap.get(bestSysIdx) ?? [];
-    arr.push({ x: rg.x, hand: st.hand, beats: restBeats });
+    arr.push({ x: rg.x, hand: st.hand, beats: restHasDot ? baseRest * 1.5 : baseRest });
     systemRestsMap.set(bestSysIdx, arr);
   }
 
@@ -249,15 +299,13 @@ export function extractNotesFromSmuflItems(
     if (bestSysIdx < 0 || !bestStaff) continue;
     const st: SmuflStaff = bestStaff;
 
-    // Ignore noteheads left of clef
     if (ng.x < st.x + st.fontSize * 0.5) continue;
 
     const stepsFromAnchor = Math.round((ng.y - st.anchorY) / st.stepPx);
-    const anchorDiatonic = st.clef === 'treble' ? 32 : 24; // G4 = 32, F3 = 24
+    const anchorDiatonic = st.clef === 'treble' ? 32 : 24;
     const diatonic = anchorDiatonic + stepsFromAnchor;
     const degree = ((diatonic % 7) + 7) % 7;
 
-    // Check for inline accidental immediately left of notehead
     let accOffset = st.keyAccidentals.get(degree) ?? 0;
     const inlineAcc = accidentals.find(
       (a) =>
@@ -271,7 +319,6 @@ export function extractNotesFromSmuflItems(
         inlineAcc.ch === SMUFL_FLAT ? -1 : inlineAcc.ch === SMUFL_SHARP ? 1 : 0;
     }
 
-    // Check for augmentation dot immediately right of notehead
     const hasDot = augDots.some(
       (d) =>
         d.x > ng.x &&
@@ -283,12 +330,55 @@ export function extractNotesFromSmuflItems(
     const kind: SmuflParsedNote['kind'] =
       ng.ch === SMUFL_NOTE_WHOLE ? 'whole' : ng.ch === SMUFL_NOTE_HALF ? 'half' : 'black';
 
+    // Determine exact rhythmic duration from notehead + SMuFL flag + PDF vector beam count + dot
+    let baseBeats = 1.0;
+    if (kind === 'whole') {
+      baseBeats = 4.0;
+    } else if (kind === 'half') {
+      baseBeats = 2.0;
+    } else {
+      // Check SMuFL flag attached to this note's stem
+      const nearFlag = flagGlyphs.find(
+        (f) => Math.abs(f.x - ng.x) < st.fontSize * 0.55 && Math.abs(f.y - ng.y) < st.fontSize * 1.8,
+      );
+      if (nearFlag) {
+        baseBeats = SMUFL_FLAGS_32ND.has(nearFlag.ch)
+          ? 0.125
+          : SMUFL_FLAGS_16TH.has(nearFlag.ch)
+            ? 0.25
+            : 0.5;
+      } else if (geometry && geometry.beams.length > 0) {
+        // Count stacked vector beams intersecting this note's stem X within this staff's vertical reach
+        const matchingBeams = geometry.beams.filter(
+          (b) =>
+            ng.x >= b.x1 - st.fontSize * 0.28 &&
+            ng.x <= b.x2 + st.fontSize * 0.28 &&
+            Math.abs(b.y - ng.y) <= st.fontSize * 2.1,
+        );
+        // Deduplicate beam Y levels within 2.5px
+        const distinctLevels: number[] = [];
+        for (const b of matchingBeams) {
+          if (!distinctLevels.some((ly) => Math.abs(ly - b.y) < 2.5)) {
+            distinctLevels.push(b.y);
+          }
+        }
+        const beamCount = Math.min(3, distinctLevels.length);
+        baseBeats = beamCount === 0 ? 1.0 : beamCount === 1 ? 0.5 : beamCount === 2 ? 0.25 : 0.125;
+      }
+    }
+    const exactBeats = hasDot ? baseBeats * 1.5 : baseBeats;
+
     const arr = systemNotesMap.get(bestSysIdx) ?? [];
-    arr.push({ x: ng.x, midi, hand: st.hand, kind, hasDot });
+    arr.push({ x: ng.x, y: ng.y, midi, hand: st.hand, kind, hasDot, exactBeats });
     systemNotesMap.set(bestSysIdx, arr);
   }
 
-  const notes: NoteEvent[] = [];
+  interface EmittedNote extends NoteEvent {
+    pdfX: number;
+    pdfY: number;
+    sysIdx: number;
+  }
+  const emittedNotes: EmittedNote[] = [];
   const measures: MeasureEvent[] = [];
   let curTime = startTimeSec;
   let curMeasure = startMeasureNumber;
@@ -303,121 +393,256 @@ export function extractNotesFromSmuflItems(
     const fontSize = sys[0].fontSize;
     const clusterTol = Math.max(4, fontSize * 0.32);
 
-    const clusters: Array<{ x: number; items: SmuflParsedNote[] }> = [];
-    for (const n of sysNotes) {
-      const last = clusters[clusters.length - 1];
-      if (last && Math.abs(n.x - last.x) <= clusterTol) {
-        last.items.push(n);
-      } else {
-        clusters.push({ x: n.x, items: [n] });
-      }
-    }
-
-    // Calibrate pxPerBeat from lower-quartile positive X gap between consecutive note clusters
-    const positiveGaps: number[] = [];
-    for (let i = 1; i < clusters.length; i++) {
-      const dx = clusters[i].x - clusters[i - 1].x;
-      if (dx > clusterTol) positiveGaps.push(dx);
-    }
-    positiveGaps.sort((a, b) => a - b);
-    const refDx =
-      positiveGaps.length > 0
-        ? positiveGaps[Math.floor(positiveGaps.length * 0.3)]
-        : fontSize * 0.9;
-    // Common fast subdivision in piano music is an eighth note (0.5 beat)
-    const pxPerBeat = Math.max(fontSize * 0.85, Math.min(fontSize * 3.2, refDx * 2));
-
-    // Anchor system start at earliest event (note or rest)
-    const firstEventX = Math.min(
-      clusters[0].x,
+    // Determine system vertical bounds to match vector barlines & pedal marks
+    const sysTopY = Math.max(...sys.map((st) => st.anchorY)) + fontSize * 0.8;
+    const sysBotY = Math.min(...sys.map((st) => st.anchorY)) - fontSize * 0.8;
+    const firstContentX = Math.min(
+      sysNotes[0].x,
+      ...sysRests.map((r) => r.x),
+    );
+    const lastContentX = Math.max(
+      sysNotes[sysNotes.length - 1].x,
       ...sysRests.map((r) => r.x),
     );
 
-    const quantizeBeat = (x: number) => Math.max(0, Math.round(((x - firstEventX) / pxPerBeat) * 4) / 4);
+    const sysPedals = pedalGlyphs
+      .filter((p) => p.y < sysBotY + fontSize * 0.5 && p.y > sysBotY - fontSize * 2.5)
+      .sort((a, b) => a.x - b.x);
 
-    // Precompute quantized beat positions for all clusters & rests per hand
-    const clusterBeats = clusters.map((c) => quantizeBeat(c.x));
-    const handEvents: Record<Hand, number[]> = { left: [], right: [] };
-    clusters.forEach((c, idx) => {
-      const b = clusterBeats[idx];
-      if (c.items.some((it) => it.hand === 'left')) handEvents.left.push(b);
-      if (c.items.some((it) => it.hand === 'right')) handEvents.right.push(b);
-    });
-    for (const r of sysRests) {
-      handEvents[r.hand].push(quantizeBeat(r.x));
-    }
-    handEvents.left.sort((a, b) => a - b);
-    handEvents.right.sort((a, b) => a - b);
-
-    const findNextSameHandBeat = (hand: Hand, currentBeat: number): number | null => {
-      const list = handEvents[hand];
-      for (const b of list) {
-        if (b > currentBeat + 0.05) return b;
+    // Find vertical barlines belonging to this system (to partition into exact measures!)
+    const rawBarXs: number[] = [];
+    if (geometry && geometry.barlines.length > 0) {
+      for (const bl of geometry.barlines) {
+        const overlapsY = bl.yMax >= sysBotY && bl.yMin <= sysTopY;
+        const tallEnough = bl.yMax - bl.yMin >= fontSize * 0.9;
+        if (overlapsY && tallEnough && bl.x > firstContentX + fontSize * 0.5) {
+          rawBarXs.push(bl.x);
+        }
       }
-      return null;
-    };
+    }
+    rawBarXs.sort((a, b) => a - b);
+    // Deduplicate double barlines (within 8px)
+    const barXs: number[] = [];
+    for (const bx of rawBarXs) {
+      if (barXs.length === 0 || bx - barXs[barXs.length - 1] > Math.max(8, fontSize * 0.45)) {
+        barXs.push(bx);
+      }
+    }
 
-    let maxEndBeat = 4;
+    if (barXs.length >= 1) {
+      // VECTOR MEASURE-BY-MEASURE RECONSTRUCTION (exact barline lock!)
+      const measureBounds: Array<{ xStart: number; xEnd: number }> = [];
+      let prevX = firstContentX - fontSize * 0.4;
+      for (const bx of barXs) {
+        if (bx > prevX + fontSize * 0.8) {
+          measureBounds.push({ xStart: prevX, xEnd: bx });
+          prevX = bx;
+        }
+      }
+      if (lastContentX > prevX + fontSize * 0.4) {
+        measureBounds.push({ xStart: prevX, xEnd: lastContentX + fontSize * 0.8 });
+      }
 
-    clusters.forEach((cluster, cIdx) => {
-      const beatStart = clusterBeats[cIdx];
-      const noteStart = curTime + beatStart * secPerBeat;
-      const measureOffset = Math.floor(beatStart / 4);
-      const seenMidis = new Set<number>();
+      measureBounds.forEach((mb) => {
+        const mStartSec = curTime;
+        const mDurSec = beatsPerMeasure * secPerBeat;
+        const mEndSec = mStartSec + mDurSec;
+        const hasPedalInMeasure = sysPedals.some((p) => p.x >= mb.xStart - fontSize && p.x <= mb.xEnd);
 
-      for (const item of cluster.items) {
-        if (seenMidis.has(item.midi)) continue;
-        seenMidis.add(item.midi);
+        measures.push({
+          number: curMeasure,
+          startTimeSec: mStartSec,
+          endTimeSec: mEndSec,
+          beats: timeBeats,
+          beatType: timeBeatType,
+        });
 
-        const nextSameHand = findNextSameHandBeat(item.hand, beatStart);
-        const gapBeats = nextSameHand !== null ? nextSameHand - beatStart : 1.0;
+        for (const hand of ['right', 'left'] as const) {
+          const mNotes = sysNotes.filter(
+            (n) => n.hand === hand && n.x >= mb.xStart && n.x < mb.xEnd,
+          );
+          const mRests = sysRests.filter(
+            (r) => r.hand === hand && r.x >= mb.xStart && r.x < mb.xEnd,
+          );
+          if (mNotes.length === 0) continue;
 
-        let durBeats: number;
-        if (item.kind === 'whole') {
-          durBeats = item.hasDot ? 6.0 : 4.0;
-        } else if (item.kind === 'half') {
-          durBeats = item.hasDot ? 3.0 : 2.0;
-        } else {
-          // Black notehead: respect dot (1.5 beats) or natural gap until next same-hand note/rest
-          if (item.hasDot) {
-            durBeats = Math.max(0.75, Math.min(1.5, gapBeats * 0.95));
-          } else {
-            durBeats = Math.max(0.35, Math.min(1.5, gapBeats * 0.92));
+          // Build ordered events (note chords + rests) in this measure for this hand
+          type MeasureEventItem =
+            | { type: 'chord'; x: number; notes: SmuflParsedNote[]; beats: number }
+            | { type: 'rest'; x: number; beats: number };
+
+          const events: MeasureEventItem[] = [];
+          for (const n of mNotes) {
+            const last = events[events.length - 1];
+            if (last && last.type === 'chord' && Math.abs(n.x - last.x) <= clusterTol) {
+              last.notes.push(n);
+              last.beats = Math.min(last.beats, n.exactBeats);
+            } else {
+              events.push({ type: 'chord', x: n.x, notes: [n], beats: n.exactBeats });
+            }
           }
+          for (const r of mRests) {
+            events.push({ type: 'rest', x: r.x, beats: r.beats });
+          }
+          events.sort((a, b) => a.x - b.x);
+
+          const totalEventBeats = events.reduce((acc, ev) => acc + ev.beats, 0);
+          const exactFit = totalEventBeats <= beatsPerMeasure + 0.51;
+          const mWidth = Math.max(1, mb.xEnd - mb.xStart);
+
+          let cumBeat = 0;
+          events.forEach((ev) => {
+            let beatOffset: number;
+            if (exactFit) {
+              beatOffset = cumBeat;
+              cumBeat += ev.beats;
+            } else {
+              const normX = Math.max(0, Math.min(0.95, (ev.x - mb.xStart) / mWidth));
+              beatOffset = Math.round(normX * beatsPerMeasure * 4) / 4;
+            }
+
+            if (ev.type === 'chord') {
+              const seenMidis = new Set<number>();
+              for (const item of ev.notes) {
+                if (seenMidis.has(item.midi)) continue;
+                seenMidis.add(item.midi);
+                let durBeats = item.exactBeats;
+                // When Ped. is active in this measure, allow left-hand bass notes to ring smoothly
+                if (hasPedalInMeasure && hand === 'left' && durBeats < 1.5) {
+                  durBeats = Math.min(beatsPerMeasure - beatOffset, Math.max(durBeats, 1.5));
+                }
+                emittedNotes.push({
+                  id: `smufl-${curMeasure}-${idCounter++}`,
+                  midi: item.midi,
+                  startTimeSec: mStartSec + beatOffset * secPerBeat,
+                  durationSec: Math.max(0.15, durBeats * secPerBeat),
+                  velocity: hand === 'left' ? 0.68 : 0.82,
+                  hand,
+                  measureNumber: curMeasure,
+                  pdfX: item.x,
+                  pdfY: item.y,
+                  sysIdx: sIdx,
+                });
+              }
+            }
+          });
         }
 
-        maxEndBeat = Math.max(maxEndBeat, beatStart + durBeats);
-        notes.push({
-          id: `smufl-${curMeasure}-${idCounter++}`,
-          midi: item.midi,
-          startTimeSec: noteStart,
-          durationSec: durBeats * secPerBeat,
-          velocity: item.hand === 'left' ? 0.68 : 0.82,
-          hand: item.hand,
-          measureNumber: curMeasure + measureOffset,
+        curTime = mEndSec;
+        curMeasure += 1;
+      });
+    } else {
+      // FALLBACK (no vector barlines): proportional X-to-beat timing
+      const clusters: Array<{ x: number; items: SmuflParsedNote[] }> = [];
+      for (const n of sysNotes) {
+        const last = clusters[clusters.length - 1];
+        if (last && Math.abs(n.x - last.x) <= clusterTol) {
+          last.items.push(n);
+        } else {
+          clusters.push({ x: n.x, items: [n] });
+        }
+      }
+
+      const positiveGaps: number[] = [];
+      for (let i = 1; i < clusters.length; i++) {
+        const dx = clusters[i].x - clusters[i - 1].x;
+        if (dx > clusterTol) positiveGaps.push(dx);
+      }
+      positiveGaps.sort((a, b) => a - b);
+      const refDx =
+        positiveGaps.length > 0
+          ? positiveGaps[Math.floor(positiveGaps.length * 0.3)]
+          : fontSize * 0.9;
+      const pxPerBeat = Math.max(fontSize * 0.85, Math.min(fontSize * 3.2, refDx * 2));
+      const quantizeBeat = (x: number) =>
+        Math.max(0, Math.round(((x - firstContentX) / pxPerBeat) * 4) / 4);
+
+      const clusterBeats = clusters.map((c) => quantizeBeat(c.x));
+      let maxEndBeat = beatsPerMeasure;
+
+      clusters.forEach((cluster, cIdx) => {
+        const beatStart = clusterBeats[cIdx];
+        const noteStart = curTime + beatStart * secPerBeat;
+        const measureOffset = Math.floor(beatStart / beatsPerMeasure);
+        const seenMidis = new Set<number>();
+
+        for (const item of cluster.items) {
+          if (seenMidis.has(item.midi)) continue;
+          seenMidis.add(item.midi);
+          maxEndBeat = Math.max(maxEndBeat, beatStart + item.exactBeats);
+          emittedNotes.push({
+            id: `smufl-${curMeasure}-${idCounter++}`,
+            midi: item.midi,
+            startTimeSec: noteStart,
+            durationSec: item.exactBeats * secPerBeat,
+            velocity: item.hand === 'left' ? 0.68 : 0.82,
+            hand: item.hand,
+            measureNumber: curMeasure + measureOffset,
+            pdfX: item.x,
+            pdfY: item.y,
+            sysIdx: sIdx,
+          });
+        }
+      });
+
+      for (const r of sysRests) {
+        maxEndBeat = Math.max(maxEndBeat, quantizeBeat(r.x) + r.beats);
+      }
+
+      const systemMeasures = Math.max(1, Math.ceil(maxEndBeat / beatsPerMeasure));
+      for (let m = 0; m < systemMeasures; m++) {
+        measures.push({
+          number: curMeasure + m,
+          startTimeSec: curTime + m * beatsPerMeasure * secPerBeat,
+          endTimeSec: curTime + (m + 1) * beatsPerMeasure * secPerBeat,
+          beats: timeBeats,
+          beatType: timeBeatType,
         });
       }
-    });
 
-    // Include trailing rests in system length
-    for (const r of sysRests) {
-      maxEndBeat = Math.max(maxEndBeat, quantizeBeat(r.x) + r.beats);
+      curTime += systemMeasures * beatsPerMeasure * secPerBeat;
+      curMeasure += systemMeasures;
     }
-
-    const systemMeasures = Math.max(1, Math.ceil(maxEndBeat / 4));
-    for (let m = 0; m < systemMeasures; m++) {
-      measures.push({
-        number: curMeasure + m,
-        startTimeSec: curTime + m * 4 * secPerBeat,
-        endTimeSec: curTime + (m + 1) * 4 * secPerBeat,
-        beats: 4,
-        beatType: 4,
-      });
-    }
-
-    curTime += systemMeasures * 4 * secPerBeat;
-    curMeasure += systemMeasures;
   });
+
+  // Merge tied notes using PDF vector tie arcs!
+  const removedIndices = new Set<number>();
+  if (geometry && geometry.ties.length > 0 && emittedNotes.length > 1) {
+    for (const tie of geometry.ties) {
+      let startIdx = -1;
+      let endIdx = -1;
+      for (let i = 0; i < emittedNotes.length; i++) {
+        if (removedIndices.has(i)) continue;
+        const n = emittedNotes[i];
+        const fontSize = 24;
+        if (Math.abs(n.pdfY - tie.y) > fontSize * 0.75) continue;
+        if (Math.abs(n.pdfX - tie.x1) <= fontSize * 0.65) {
+          startIdx = i;
+        } else if (
+          startIdx >= 0 &&
+          n.midi === emittedNotes[startIdx].midi &&
+          n.hand === emittedNotes[startIdx].hand &&
+          n.sysIdx === emittedNotes[startIdx].sysIdx &&
+          Math.abs(n.pdfX - tie.x2) <= fontSize * 0.65
+        ) {
+          endIdx = i;
+          break;
+        }
+      }
+      if (startIdx >= 0 && endIdx >= 0) {
+        const a = emittedNotes[startIdx];
+        const b = emittedNotes[endIdx];
+        const mergedEnd = Math.max(a.startTimeSec + a.durationSec, b.startTimeSec + b.durationSec);
+        a.durationSec = mergedEnd - a.startTimeSec;
+        removedIndices.add(endIdx);
+      }
+    }
+  }
+
+  const notes: NoteEvent[] = emittedNotes
+    .filter((_, idx) => !removedIndices.has(idx))
+    .map(({ pdfX: _x, pdfY: _y, sysIdx: _s, ...note }) => note)
+    .sort((a, b) => a.startTimeSec - b.startTimeSec || a.midi - b.midi);
 
   return { notes, measures, nextMeasureNumber: curMeasure, endTimeSec: curTime, detectedBpm };
 }
@@ -785,10 +1010,18 @@ export async function parsePdfOffline(
     onProgress?.({ currentPage: pageNum, totalPages });
     const page = await pdf.getPage(pageNum);
 
-    // 1. Try high-precision SMuFL vector text extraction first (MuseScore, Dorico, Sibelius PDFs)
+    // 1. Try high-precision SMuFL + Vector OperatorList extraction first (MuseScore, Dorico, Sibelius PDFs)
     let pageExtracted = false;
     try {
-      const textContent = await page.getTextContent();
+      const [textContent, opList] = await Promise.all([
+        page.getTextContent(),
+        page.getOperatorList(),
+      ]);
+      const geometry = extractVectorGeometryFromOps(
+        opList.fnArray,
+        opList.argsArray,
+        pdfjsLib.OPS as unknown as Record<string, number>,
+      );
       const smuflItems: SmuflTextItem[] = [];
       for (const raw of textContent.items) {
         if (!('str' in raw) || !raw.str) continue;
@@ -801,7 +1034,13 @@ export async function parsePdfOffline(
           fontSize,
         });
       }
-      const smuflRes = extractNotesFromSmuflItems(smuflItems, nextMeasure, currentTime, bpm);
+      const smuflRes = extractNotesFromSmuflItems(
+        smuflItems,
+        nextMeasure,
+        currentTime,
+        bpm,
+        geometry,
+      );
       if (smuflRes.detectedBpm && pageNum === 1) {
         bpm = smuflRes.detectedBpm;
       }
