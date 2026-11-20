@@ -149,4 +149,33 @@ describe('pdfVectorExtractor & vector-assisted SMuFL OMR', () => {
     // Measure 2 A4 starts at beat 5.0 (4.0 + 1.0)
     expect(rh[6].startTimeSec).toBeCloseTo(5.0, 2);
   });
+
+  it('handles 5-flat key signature (Cage), 3/4 time carryover (Idea 22), and dual-treble grand staff', () => {
+    // 5 flats (Bb, Eb, Ab, Db, Gb) + two treble staves paired together + carried-over 3/4 time
+    const items: SmuflTextItem[] = [
+      { str: '\uE050', x: 50, y: 700, fontSize: 24 },
+      { str: '\uE260', x: 66, y: 706, fontSize: 24 },
+      { str: '\uE260', x: 75, y: 712, fontSize: 24 },
+      { str: '\uE260', x: 84, y: 703, fontSize: 24 },
+      { str: '\uE260', x: 93, y: 709, fontSize: 24 },
+      { str: '\uE260', x: 102, y: 700, fontSize: 24 }, // 5th flat (Gb) at x=102 (> 3.2*24!)
+      // Bottom staff ALSO uses treble clef (like Cage M94)
+      { str: '\uE050', x: 50, y: 620, fontSize: 24 },
+      // Note G4 on RH (y=700) -> flatted to Gb4 = MIDI 66!
+      { str: '\uE0A4', x: 140, y: 700, fontSize: 24 },
+      // Note G4 on LH (y=620) -> paired into same grand staff at t=0!
+      { str: '\uE0A4', x: 140, y: 620, fontSize: 24 },
+    ];
+    const geom: VectorGeometry = {
+      barlines: [{ x: 260, yMin: 605, yMax: 715 }],
+      beams: [],
+      ties: [],
+    };
+    const res = extractNotesFromSmuflItems(items, 1, 0, 60, geom, { beats: 3, beatType: 4 });
+    expect(res.measures).toHaveLength(1);
+    expect(res.measures[0].beats).toBe(3);
+    expect(res.measures[0].endTimeSec).toBeCloseTo(3.0, 2);
+    expect(res.notes.find((n) => n.hand === 'right')?.midi).toBe(66); // Gb4!
+    expect(res.notes.find((n) => n.hand === 'left')?.startTimeSec).toBeCloseTo(0, 2);
+  });
 });

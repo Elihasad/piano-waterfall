@@ -37,6 +37,8 @@ const SMUFL_RESTS = new Set(['\uE4E3', '\uE4E4', '\uE4E5', '\uE4E6', '\uE4E7']);
 const SMUFL_FLAGS_8TH = new Set(['\uE240', '\uE241']);
 const SMUFL_FLAGS_16TH = new Set(['\uE242', '\uE243']);
 const SMUFL_FLAGS_32ND = new Set(['\uE244', '\uE245']);
+const SMUFL_TIME_COMMON = '\uE08A';
+const SMUFL_TIME_CUT = '\uE08B';
 const SMUFL_TIME_DIGITS: Record<string, number> = {
   '\uE082': 2,
   '\uE083': 3,
@@ -63,14 +65,16 @@ export function extractNotesFromSmuflItems(
   items: SmuflTextItem[],
   startMeasureNumber: number,
   startTimeSec: number,
-  defaultBpm = 100,
+  defaultBpm = 110,
   geometry?: VectorGeometry,
+  initialTimeSig: { beats: number; beatType: number } = { beats: 4, beatType: 4 },
 ): {
   notes: NoteEvent[];
   measures: MeasureEvent[];
   nextMeasureNumber: number;
   endTimeSec: number;
   detectedBpm?: number;
+  detectedTimeSig?: { beats: number; beatType: number };
 } {
   let detectedBpm: number | undefined;
   for (const item of items) {
@@ -147,7 +151,9 @@ export function extractNotesFromSmuflItems(
     (g) => SMUFL_FLAGS_8TH.has(g.ch) || SMUFL_FLAGS_16TH.has(g.ch) || SMUFL_FLAGS_32ND.has(g.ch),
   );
   const pedalGlyphs = glyphs.filter((g) => g.ch === SMUFL_PEDAL);
-  const timeDigitGlyphs = glyphs.filter((g) => g.ch in SMUFL_TIME_DIGITS);
+  const timeDigitGlyphs = glyphs.filter(
+    (g) => g.ch in SMUFL_TIME_DIGITS || g.ch === SMUFL_TIME_COMMON || g.ch === SMUFL_TIME_CUT,
+  );
   const noteGlyphs = glyphs.filter(
     (g) => g.ch === SMUFL_NOTE_BLACK || g.ch === SMUFL_NOTE_HALF || g.ch === SMUFL_NOTE_WHOLE,
   );
@@ -167,20 +173,25 @@ export function extractNotesFromSmuflItems(
     const fontSize = c.fontSize > 4 ? c.fontSize : 20;
     const stepPx = fontSize / 8;
 
-    // Detect key signature accidentals immediately to the right of the clef
+    // Detect key signature accidentals immediately to the right of the clef (supports up to 7 flats/sharps!)
+    const firstNoteOnStaff = noteGlyphs
+      .filter((n) => n.x > c.x + fontSize * 0.5 && Math.abs(n.y - c.y) < fontSize * 1.8)
+      .reduce((minX, n) => Math.min(minX, n.x), Infinity);
+    const keyMaxX = Math.min(c.x + fontSize * 4.8, firstNoteOnStaff - fontSize * 0.3);
+
     const keyFlats = accidentals.filter(
       (a) =>
         a.ch === SMUFL_FLAT &&
         a.x > c.x &&
-        a.x - c.x < fontSize * 3.2 &&
-        Math.abs(a.y - c.y) < fontSize * 1.1,
+        a.x < keyMaxX &&
+        Math.abs(a.y - c.y) < fontSize * 1.15,
     );
     const keySharps = accidentals.filter(
       (a) =>
         a.ch === SMUFL_SHARP &&
         a.x > c.x &&
-        a.x - c.x < fontSize * 3.2 &&
-        Math.abs(a.y - c.y) < fontSize * 1.1,
+        a.x < keyMaxX &&
+        Math.abs(a.y - c.y) < fontSize * 1.15,
     );
 
     const keyAccidentals = new Map<number, number>();
@@ -203,12 +214,14 @@ export function extractNotesFromSmuflItems(
     };
   });
 
-  // Group staves into grand-staff systems (treble + bass pairs top-to-bottom)
+  // Group staves into grand-staff systems (handles Treble+Bass AND temporary Treble+Treble / Bass+Bass!)
   const systems: SmuflStaff[][] = [];
   for (let i = 0; i < staves.length; i++) {
     const cur = staves[i];
     const next = staves[i + 1];
-    if (cur.clef === 'treble' && next?.clef === 'bass' && cur.anchorY - next.anchorY < cur.fontSize * 5.5) {
+    if (next && cur.anchorY - next.anchorY > cur.fontSize * 1.2 && cur.anchorY - next.anchorY < cur.fontSize * 5.8) {
+      cur.hand = 'right';
+      next.hand = 'left';
       systems.push([cur, next]);
       i++;
     } else {
@@ -216,25 +229,35 @@ export function extractNotesFromSmuflItems(
     }
   }
 
-  // Detect time signature (default 4/4) from stacked SMuFL digits near first clef
-  let timeBeats = 4;
-  let timeBeatType = 4;
-  if (staves.length > 0 && timeDigitGlyphs.length >= 2) {
+  // Detect time signature (carry forward from previous page if not printed on this page!)
+  let timeBeats = initialTimeSig.beats;
+  let timeBeatType = initialTimeSig.beatType;
+  let detectedTimeSig: { beats: number; beatType: number } | undefined;
+  if (staves.length > 0 && timeDigitGlyphs.length >= 1) {
     const firstStaff = staves[0];
-    const nearClefDigits = timeDigitGlyphs
+    const nearClefTime = timeDigitGlyphs
       .filter(
         (d) =>
           d.x > firstStaff.x &&
-          d.x - firstStaff.x < firstStaff.fontSize * 4.2 &&
+          d.x - firstStaff.x < firstStaff.fontSize * 5.2 &&
           Math.abs(d.y - firstStaff.anchorY) < firstStaff.fontSize * 1.1,
       )
-      .sort((a, b) => b.y - a.y); // higher Y = numerator, lower Y = denominator
-    if (nearClefDigits.length >= 2) {
-      const num = SMUFL_TIME_DIGITS[nearClefDigits[0].ch];
-      const den = SMUFL_TIME_DIGITS[nearClefDigits[1].ch];
+      .sort((a, b) => b.y - a.y);
+    if (nearClefTime.some((d) => d.ch === SMUFL_TIME_COMMON)) {
+      timeBeats = 4;
+      timeBeatType = 4;
+      detectedTimeSig = { beats: 4, beatType: 4 };
+    } else if (nearClefTime.some((d) => d.ch === SMUFL_TIME_CUT)) {
+      timeBeats = 2;
+      timeBeatType = 2;
+      detectedTimeSig = { beats: 2, beatType: 2 };
+    } else if (nearClefTime.length >= 2) {
+      const num = SMUFL_TIME_DIGITS[nearClefTime[0].ch];
+      const den = SMUFL_TIME_DIGITS[nearClefTime[1].ch];
       if (num && den) {
         timeBeats = num;
         timeBeatType = den;
+        detectedTimeSig = { beats: num, beatType: den };
       }
     }
   }
@@ -682,7 +705,14 @@ export function extractNotesFromSmuflItems(
     .map(({ pdfX: _x, pdfY: _y, sysIdx: _s, ...note }) => note)
     .sort((a, b) => a.startTimeSec - b.startTimeSec || a.midi - b.midi);
 
-  return { notes, measures, nextMeasureNumber: curMeasure, endTimeSec: curTime, detectedBpm };
+  return {
+    notes,
+    measures,
+    nextMeasureNumber: curMeasure,
+    endTimeSec: curTime,
+    detectedBpm,
+    detectedTimeSig,
+  };
 }
 
 export function diatonicStepToMidi(clef: 'treble' | 'bass', stepsFromBottomLine: number): number {
@@ -1042,7 +1072,8 @@ export async function parsePdfOffline(
   const allMeasures: MeasureEvent[] = [];
   let nextMeasure = 1;
   let currentTime = 0;
-  let bpm = 100;
+  let bpm = 110;
+  let timeSig = { beats: 4, beatType: 4 };
 
   for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
     onProgress?.({ currentPage: pageNum, totalPages });
@@ -1078,9 +1109,13 @@ export async function parsePdfOffline(
         currentTime,
         bpm,
         geometry,
+        timeSig,
       );
       if (smuflRes.detectedBpm && pageNum === 1) {
         bpm = smuflRes.detectedBpm;
+      }
+      if (smuflRes.detectedTimeSig) {
+        timeSig = smuflRes.detectedTimeSig;
       }
       if (smuflRes.notes.length > 0) {
         allNotes.push(...smuflRes.notes);
