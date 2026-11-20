@@ -131,4 +131,27 @@ describe('pdfOfflineOmr', () => {
     expect(res.notes.some((n) => n.hand === 'right' && n.midi === 65 && n.durationSec > 1.0)).toBe(true); // Half note!
     expect(res.notes.some((n) => n.hand === 'left' && n.midi === 53)).toBe(true);
   });
+
+  it('preserves musical rhythm, sustained dotted/half notes, and rest pauses from proportional X positions', () => {
+    const items: SmuflTextItem[] = [
+      { str: '\uE050', x: 50, y: 700, fontSize: 24 },
+      // Two fast notes 18px apart (0.5 beat each), then a dotted half note with 72px gap before next note
+      { str: '\uE0A4', x: 100, y: 700, fontSize: 24 }, // G4
+      { str: '\uE0A4', x: 118, y: 703, fontSize: 24 }, // A4 (short 18px gap)
+      { str: '\uE0A3', x: 136, y: 706, fontSize: 24 }, // B4 half note
+      { str: '\uE1E7', x: 146, y: 706, fontSize: 24 }, // augmentation dot -> 3 beats!
+      { str: '\uE4E5', x: 208, y: 700, fontSize: 24 }, // quarter rest
+      { str: '\uE0A4', x: 244, y: 700, fontSize: 24 }, // G4 after rest
+    ];
+
+    const res = extractNotesFromSmuflItems(items, 1, 0, 60); // 1 beat = 1.0s
+    const sorted = [...res.notes].sort((a, b) => a.startTimeSec - b.startTimeSec);
+    expect(sorted).toHaveLength(4);
+    const shortGap = sorted[1].startTimeSec - sorted[0].startTimeSec;
+    const longGap = sorted[3].startTimeSec - sorted[2].startTimeSec;
+    // The dotted half + rest gap must be dramatically longer than the short eighth-note gap
+    expect(longGap).toBeGreaterThan(shortGap * 3);
+    // The dotted half note (sorted[2]) must sustain ~3 beats (3.0s at 60 BPM)
+    expect(sorted[2].durationSec).toBeGreaterThanOrEqual(2.5);
+  });
 });

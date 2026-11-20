@@ -30,6 +30,8 @@ const SMUFL_NOTE_WHOLE = '\uE0A2';
 const SMUFL_FLAT = '\uE260';
 const SMUFL_NATURAL = '\uE261';
 const SMUFL_SHARP = '\uE262';
+const SMUFL_AUG_DOT = '\uE1E7';
+const SMUFL_RESTS = new Set(['\uE4E3', '\uE4E4', '\uE4E5', '\uE4E6', '\uE4E7']);
 
 function diatonicWithAccidentalToMidi(diatonic: number, accidentalOffset: number): number {
   const octave = Math.floor(diatonic / 7);
@@ -123,6 +125,8 @@ export function extractNotesFromSmuflItems(
   const accidentals = glyphs.filter(
     (g) => g.ch === SMUFL_FLAT || g.ch === SMUFL_SHARP || g.ch === SMUFL_NATURAL,
   );
+  const augDots = glyphs.filter((g) => g.ch === SMUFL_AUG_DOT);
+  const restGlyphs = glyphs.filter((g) => SMUFL_RESTS.has(g.ch));
   const noteGlyphs = glyphs.filter(
     (g) => g.ch === SMUFL_NOTE_BLACK || g.ch === SMUFL_NOTE_HALF || g.ch === SMUFL_NOTE_WHOLE,
   );
@@ -191,11 +195,40 @@ export function extractNotesFromSmuflItems(
     }
   }
 
-  // Assign each notehead to its closest staff vertically
-  const systemNotesMap = new Map<
-    number,
-    Array<{ x: number; midi: number; hand: Hand; durationBeats: number }>
-  >();
+  // Assign each notehead and rest to its closest staff vertically
+  interface SmuflParsedNote {
+    x: number;
+    midi: number;
+    hand: Hand;
+    kind: 'whole' | 'half' | 'black';
+    hasDot: boolean;
+  }
+  const systemNotesMap = new Map<number, SmuflParsedNote[]>();
+  const systemRestsMap = new Map<number, Array<{ x: number; hand: Hand; beats: number }>>();
+
+  for (const rg of restGlyphs) {
+    let bestSysIdx = -1;
+    let bestStaff: SmuflStaff | null = null;
+    let bestDist = Infinity;
+    systems.forEach((sys, sIdx) => {
+      for (const st of sys) {
+        const dist = Math.abs(rg.y - st.anchorY);
+        if (dist < bestDist && dist < st.fontSize * 2.0) {
+          bestDist = dist;
+          bestSysIdx = sIdx;
+          bestStaff = st;
+        }
+      }
+    });
+    if (bestSysIdx < 0 || !bestStaff) continue;
+    const st: SmuflStaff = bestStaff;
+    if (rg.x < st.x + st.fontSize * 0.5) continue;
+    const restBeats =
+      rg.ch === '\uE4E3' ? 4 : rg.ch === '\uE4E4' ? 2 : rg.ch === '\uE4E5' ? 1 : rg.ch === '\uE4E6' ? 0.5 : 0.25;
+    const arr = systemRestsMap.get(bestSysIdx) ?? [];
+    arr.push({ x: rg.x, hand: st.hand, beats: restBeats });
+    systemRestsMap.set(bestSysIdx, arr);
+  }
 
   for (const ng of noteGlyphs) {
     let bestSysIdx = -1;
@@ -238,12 +271,20 @@ export function extractNotesFromSmuflItems(
         inlineAcc.ch === SMUFL_FLAT ? -1 : inlineAcc.ch === SMUFL_SHARP ? 1 : 0;
     }
 
+    // Check for augmentation dot immediately right of notehead
+    const hasDot = augDots.some(
+      (d) =>
+        d.x > ng.x &&
+        d.x - ng.x < st.fontSize * 0.95 &&
+        Math.abs(d.y - ng.y) < st.stepPx * 1.6,
+    );
+
     const midi = diatonicWithAccidentalToMidi(diatonic, accOffset);
-    const durationBeats =
-      ng.ch === SMUFL_NOTE_WHOLE ? 4.0 : ng.ch === SMUFL_NOTE_HALF ? 2.0 : 0.75;
+    const kind: SmuflParsedNote['kind'] =
+      ng.ch === SMUFL_NOTE_WHOLE ? 'whole' : ng.ch === SMUFL_NOTE_HALF ? 'half' : 'black';
 
     const arr = systemNotesMap.get(bestSysIdx) ?? [];
-    arr.push({ x: ng.x, midi, hand: st.hand, durationBeats });
+    arr.push({ x: ng.x, midi, hand: st.hand, kind, hasDot });
     systemNotesMap.set(bestSysIdx, arr);
   }
 
@@ -256,23 +297,114 @@ export function extractNotesFromSmuflItems(
   systems.forEach((sys, sIdx) => {
     const sysNotes = systemNotesMap.get(sIdx);
     if (!sysNotes || sysNotes.length === 0) return;
+    const sysRests = systemRestsMap.get(sIdx) ?? [];
 
     sysNotes.sort((a, b) => a.x - b.x);
-    const clusterTol = Math.max(4, sys[0].fontSize * 0.32);
-    const clusters: Array<typeof sysNotes> = [];
+    const fontSize = sys[0].fontSize;
+    const clusterTol = Math.max(4, fontSize * 0.32);
+
+    const clusters: Array<{ x: number; items: SmuflParsedNote[] }> = [];
     for (const n of sysNotes) {
       const last = clusters[clusters.length - 1];
-      if (last && Math.abs(n.x - last[0].x) <= clusterTol) {
-        last.push(n);
+      if (last && Math.abs(n.x - last.x) <= clusterTol) {
+        last.items.push(n);
       } else {
-        clusters.push([n]);
+        clusters.push({ x: n.x, items: [n] });
       }
     }
 
-    const beatsPerStep = 0.5;
-    const systemDurationSec = Math.max(4 * secPerBeat, clusters.length * beatsPerStep * secPerBeat);
-    const systemMeasures = Math.max(1, Math.round(systemDurationSec / (4 * secPerBeat)));
+    // Calibrate pxPerBeat from lower-quartile positive X gap between consecutive note clusters
+    const positiveGaps: number[] = [];
+    for (let i = 1; i < clusters.length; i++) {
+      const dx = clusters[i].x - clusters[i - 1].x;
+      if (dx > clusterTol) positiveGaps.push(dx);
+    }
+    positiveGaps.sort((a, b) => a - b);
+    const refDx =
+      positiveGaps.length > 0
+        ? positiveGaps[Math.floor(positiveGaps.length * 0.3)]
+        : fontSize * 0.9;
+    // Common fast subdivision in piano music is an eighth note (0.5 beat)
+    const pxPerBeat = Math.max(fontSize * 0.85, Math.min(fontSize * 3.2, refDx * 2));
 
+    // Anchor system start at earliest event (note or rest)
+    const firstEventX = Math.min(
+      clusters[0].x,
+      ...sysRests.map((r) => r.x),
+    );
+
+    const quantizeBeat = (x: number) => Math.max(0, Math.round(((x - firstEventX) / pxPerBeat) * 4) / 4);
+
+    // Precompute quantized beat positions for all clusters & rests per hand
+    const clusterBeats = clusters.map((c) => quantizeBeat(c.x));
+    const handEvents: Record<Hand, number[]> = { left: [], right: [] };
+    clusters.forEach((c, idx) => {
+      const b = clusterBeats[idx];
+      if (c.items.some((it) => it.hand === 'left')) handEvents.left.push(b);
+      if (c.items.some((it) => it.hand === 'right')) handEvents.right.push(b);
+    });
+    for (const r of sysRests) {
+      handEvents[r.hand].push(quantizeBeat(r.x));
+    }
+    handEvents.left.sort((a, b) => a - b);
+    handEvents.right.sort((a, b) => a - b);
+
+    const findNextSameHandBeat = (hand: Hand, currentBeat: number): number | null => {
+      const list = handEvents[hand];
+      for (const b of list) {
+        if (b > currentBeat + 0.05) return b;
+      }
+      return null;
+    };
+
+    let maxEndBeat = 4;
+
+    clusters.forEach((cluster, cIdx) => {
+      const beatStart = clusterBeats[cIdx];
+      const noteStart = curTime + beatStart * secPerBeat;
+      const measureOffset = Math.floor(beatStart / 4);
+      const seenMidis = new Set<number>();
+
+      for (const item of cluster.items) {
+        if (seenMidis.has(item.midi)) continue;
+        seenMidis.add(item.midi);
+
+        const nextSameHand = findNextSameHandBeat(item.hand, beatStart);
+        const gapBeats = nextSameHand !== null ? nextSameHand - beatStart : 1.0;
+
+        let durBeats: number;
+        if (item.kind === 'whole') {
+          durBeats = item.hasDot ? 6.0 : 4.0;
+        } else if (item.kind === 'half') {
+          durBeats = item.hasDot ? 3.0 : 2.0;
+        } else {
+          // Black notehead: respect dot (1.5 beats) or natural gap until next same-hand note/rest
+          if (item.hasDot) {
+            durBeats = Math.max(0.75, Math.min(1.5, gapBeats * 0.95));
+          } else {
+            durBeats = Math.max(0.35, Math.min(1.5, gapBeats * 0.92));
+          }
+        }
+
+        maxEndBeat = Math.max(maxEndBeat, beatStart + durBeats);
+        notes.push({
+          id: `smufl-${curMeasure}-${idCounter++}`,
+          midi: item.midi,
+          startTimeSec: noteStart,
+          durationSec: durBeats * secPerBeat,
+          velocity: item.hand === 'left' ? 0.68 : 0.82,
+          hand: item.hand,
+          measureNumber: curMeasure + measureOffset,
+        });
+      }
+    });
+
+    // Include trailing rests in system length
+    for (const r of sysRests) {
+      maxEndBeat = Math.max(maxEndBeat, quantizeBeat(r.x) + r.beats);
+    }
+
+    const systemMeasures = Math.max(1, Math.ceil(maxEndBeat / 4));
     for (let m = 0; m < systemMeasures; m++) {
       measures.push({
         number: curMeasure + m,
@@ -282,25 +414,6 @@ export function extractNotesFromSmuflItems(
         beatType: 4,
       });
     }
-
-    clusters.forEach((cluster, cIdx) => {
-      const noteStart = curTime + cIdx * beatsPerStep * secPerBeat;
-      const measureOffset = Math.floor((cIdx * beatsPerStep) / 4);
-      const seenMidis = new Set<number>();
-      for (const item of cluster) {
-        if (seenMidis.has(item.midi)) continue;
-        seenMidis.add(item.midi);
-        notes.push({
-          id: `smufl-${curMeasure}-${idCounter++}`,
-          midi: item.midi,
-          startTimeSec: noteStart,
-          durationSec: item.durationBeats * secPerBeat,
-          velocity: item.hand === 'left' ? 0.68 : 0.82,
-          hand: item.hand,
-          measureNumber: curMeasure + measureOffset,
-        });
-      }
-    });
 
     curTime += systemMeasures * 4 * secPerBeat;
     curMeasure += systemMeasures;
