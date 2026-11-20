@@ -393,8 +393,7 @@ export function extractNotesFromSmuflItems(
     const fontSize = sys[0].fontSize;
     const clusterTol = Math.max(4, fontSize * 0.32);
 
-    // Determine system vertical bounds to match vector barlines & pedal marks
-    const sysTopY = Math.max(...sys.map((st) => st.anchorY)) + fontSize * 0.8;
+    // Determine system bottom bound to match pedal marks
     const sysBotY = Math.min(...sys.map((st) => st.anchorY)) - fontSize * 0.8;
     const firstContentX = Math.min(
       sysNotes[0].x,
@@ -409,22 +408,41 @@ export function extractNotesFromSmuflItems(
       .filter((p) => p.y < sysBotY + fontSize * 0.5 && p.y > sysBotY - fontSize * 2.5)
       .sort((a, b) => a.x - b.x);
 
-    // Find vertical barlines belonging to this system (to partition into exact measures!)
+    // Find REAL vertical barlines belonging to this system (strictly rejecting note stems!)
     const rawBarXs: number[] = [];
     if (geometry && geometry.barlines.length > 0) {
-      for (const bl of geometry.barlines) {
-        const overlapsY = bl.yMax >= sysBotY && bl.yMin <= sysTopY;
-        const tallEnough = bl.yMax - bl.yMin >= fontSize * 0.9;
-        if (overlapsY && tallEnough && bl.x > firstContentX + fontSize * 0.5) {
-          rawBarXs.push(bl.x);
+      if (sys.length >= 2) {
+        // Grand-staff barlines MUST span continuously from Treble staff down to Bass staff
+        const trebleY = sys[0].anchorY;
+        const bassY = sys[1].anchorY;
+        for (const bl of geometry.barlines) {
+          const spansBothStaves =
+            bl.yMax >= trebleY + fontSize * 0.2 && bl.yMin <= bassY - fontSize * 0.2;
+          if (spansBothStaves && bl.x > firstContentX + fontSize * 1.2) {
+            rawBarXs.push(bl.x);
+          }
+        }
+      } else {
+        // Single-staff barlines match the exact 5-line staff bounds and don't sit on a notehead
+        const st = sys[0];
+        const staffTop = st.clef === 'treble' ? st.anchorY + fontSize * 0.75 : st.anchorY + fontSize * 0.25;
+        const staffBot = staffTop - fontSize;
+        for (const bl of geometry.barlines) {
+          const matchesStaffHeight =
+            Math.abs(bl.yMax - staffTop) <= fontSize * 0.2 &&
+            Math.abs(bl.yMin - staffBot) <= fontSize * 0.2;
+          const touchesNote = sysNotes.some((n) => Math.abs(n.x - bl.x) < fontSize * 0.35);
+          if (matchesStaffHeight && !touchesNote && bl.x > firstContentX + fontSize * 1.2) {
+            rawBarXs.push(bl.x);
+          }
         }
       }
     }
     rawBarXs.sort((a, b) => a - b);
-    // Deduplicate double barlines (within 8px)
+    // Deduplicate double barlines and enforce minimum realistic measure width (>= 2.4 * fontSize)
     const barXs: number[] = [];
     for (const bx of rawBarXs) {
-      if (barXs.length === 0 || bx - barXs[barXs.length - 1] > Math.max(8, fontSize * 0.45)) {
+      if (barXs.length === 0 || bx - barXs[barXs.length - 1] >= Math.max(24, fontSize * 2.4)) {
         barXs.push(bx);
       }
     }

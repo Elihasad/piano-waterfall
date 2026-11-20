@@ -79,8 +79,15 @@ describe('pdfVectorExtractor & vector-assisted SMuFL OMR', () => {
 
     const geometry: VectorGeometry = {
       barlines: [
+        // Real grand-staff barlines spanning Treble (700) down to Bass (620)
         { x: 260, yMin: 605, yMax: 715 },
         { x: 420, yMin: 605, yMax: 715 },
+        // Note stems inside Treble & Bass (height ~24-30px) — MUST NOT be treated as barlines!
+        { x: 112, yMin: 700, yMax: 726 },
+        { x: 132, yMin: 703, yMax: 726 },
+        { x: 152, yMin: 706, yMax: 726 },
+        { x: 187, yMin: 703, yMax: 728 },
+        { x: 112, yMin: 594, yMax: 620 },
       ],
       beams: [
         // 1 beam over eighths (105..125)
