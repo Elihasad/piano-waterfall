@@ -33,13 +33,31 @@ export default function App() {
 
   const [songs, setSongs] = useState<Song[]>(DEMO_SONGS);
   const [currentSong, setCurrentSong] = useState<Song>(DEMO_SONGS[0]);
+  const initialOmrParam = useMemo(() => {
+    if (typeof window === 'undefined') return '';
+    const omr = new URLSearchParams(window.location.search).get('omr')?.trim() ?? '';
+    return /^https?:\/\//i.test(omr) ? omr : '';
+  }, []);
+
   const [settings, setSettings] = useState<AppSettings>(() => {
-    const loaded = getSettings();
+    let loaded = getSettings();
+    if (initialOmrParam) {
+      loaded = saveSettings({ omrServerUrl: initialOmrParam });
+    }
     player.setPreset(loaded.soundPreset);
     return loaded;
   });
   const [fullKeyboard, setFullKeyboard] = useState(false);
-  const [showLibrary, setShowLibrary] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(() => Boolean(initialOmrParam));
+
+  useEffect(() => {
+    if (!initialOmrParam || typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    params.delete('omr');
+    const nextSearch = params.toString();
+    const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash}`;
+    window.history.replaceState({}, '', nextUrl);
+  }, [initialOmrParam]);
   const [showSettings, setShowSettings] = useState(false);
   const [isPortraitMobile, setIsPortraitMobile] = useState(false);
   const [midiState, setMidiState] = useState<MidiDeviceState>({

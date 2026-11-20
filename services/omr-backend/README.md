@@ -1,3 +1,13 @@
+---
+title: Piano Waterfall OMR
+emoji: 🎹
+colorFrom: purple
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Piano Waterfall — PDF OMR Backend
 
 Dịch vụ FastAPI chuyển đổi bản nhạc **PDF nhiều trang → MusicXML** theo cơ chế bất đồng bộ (không bị timeout trên cloud miễn phí).

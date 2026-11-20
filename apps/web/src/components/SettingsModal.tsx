@@ -60,7 +60,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#2c2e3b]">
           <h2 className="text-sm font-bold text-slate-100">
             {t(language, 'settingsTitle')}{' '}
-            <span className="text-[11px] font-normal text-slate-400">v1.3</span>
+            <span className="text-[11px] font-normal text-slate-400">v1.3.1</span>
           </h2>
           <button
             type="button"
@@ -177,21 +177,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               type="url"
               value={omrUrl}
               onChange={(e) => setOmrUrl(e.target.value)}
-              placeholder="https://your-space.hf.space"
+              placeholder="https://xxxx.trycloudflare.com"
               className="w-full rounded-lg bg-[#121216] border border-[#2c2e3b] px-3 py-2 text-slate-100 placeholder:text-slate-500"
             />
             <p className="text-[11px] text-slate-400 leading-relaxed">{t(language, 'omrUrlDesc')}</p>
-            {omrUrl.trim() && (
-              <button
-                type="button"
-                onClick={handleTest}
-                disabled={testing}
-                className="px-3 py-1.5 rounded-lg bg-[#242632] hover:bg-[#2f3242] text-slate-200 font-semibold flex items-center gap-1.5"
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href="https://colab.research.google.com/github/Elihasad/piano-waterfall/blob/main/services/omr-backend/Piano_Waterfall_AI_OMR_Colab.ipynb"
+                target="_blank"
+                rel="noreferrer"
+                className="px-3 py-1.5 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/40 text-violet-200 font-semibold inline-flex items-center gap-1.5"
               >
-                {testing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {t(language, 'testConnection')}
-              </button>
-            )}
+                <Sparkles className="w-3.5 h-3.5" />
+                {language === 'vi' ? 'Mở AI OMR Miễn phí (Colab)' : 'Launch Free AI OMR (Colab)'}
+              </a>
+              {omrUrl.trim() && (
+                <button
+                  type="button"
+                  onClick={handleTest}
+                  disabled={testing}
+                  className="px-3 py-1.5 rounded-lg bg-[#242632] hover:bg-[#2f3242] text-slate-200 font-semibold flex items-center gap-1.5"
+                >
+                  {testing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  {t(language, 'testConnection')}
+                </button>
+              )}
+            </div>
             {testResult && (
               <div
                 className={`flex items-start gap-1.5 p-2 rounded-lg text-[11px] ${
