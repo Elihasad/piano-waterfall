@@ -98,26 +98,68 @@ export function extractNotesFromSmuflItems(
   detectedTimeSig?: { beats: number; beatType: number };
 } {
   let detectedBpm: number | undefined;
+  let detectedBpmRaw: number | undefined;
+  let detectedBpmHadDot = false;
   for (const item of items) {
     const m = item.str.match(/=\s*(\d{2,3})\b/);
     if (m) {
       const val = Number.parseInt(m[1], 10);
       if (val >= 30 && val <= 260) {
         // Dotted-quarter tempo (e.g. 12/8 or 6/8 "♩. = 64" -> 96 quarter-note BPM),
-        // checking both same text item and an adjacent SMuFL dot glyph just left of "= 64"
-        const hasInlineDot = item.str.includes(SMUFL_AUG_DOT) || item.str.includes('.');
+        // checking both same text item and adjacent SMuFL dot glyphs (E1E7 or ECA7 metronome dot)
+        const hasInlineDot =
+          item.str.includes(SMUFL_AUG_DOT) || item.str.includes('\uECA7') || item.str.includes('.');
         const hasNearbyDot = items.some(
           (other) =>
             other !== item &&
-            other.str.includes(SMUFL_AUG_DOT) &&
+            (other.str.includes(SMUFL_AUG_DOT) || other.str.includes('\uECA7')) &&
             other.x <= item.x + item.fontSize &&
-            item.x - other.x < item.fontSize * 3.0 &&
-            Math.abs(other.y - item.y) < item.fontSize * 1.2,
+            item.x - other.x < item.fontSize * 3.5 &&
+            Math.abs(other.y - item.y) < item.fontSize * 1.4,
         );
-        detectedBpm = hasInlineDot || hasNearbyDot ? Math.round(val * 1.5) : val;
+        detectedBpmRaw = val;
+        detectedBpmHadDot = hasInlineDot || hasNearbyDot;
+        detectedBpm = detectedBpmHadDot ? Math.round(val * 1.5) : val;
         break;
       }
     }
+  }
+  if (detectedBpm === undefined) {
+    const ITALIAN_TEMPOS: ReadonlyArray<[RegExp, number]> = [
+      [/\bprestissimo\b/i, 192],
+      [/\bpresto\b/i, 176],
+      [/\bvivace\b/i, 152],
+      [/\ballegro\b/i, 132],
+      [/\ballegretto\b/i, 112],
+      [/\bmoderato\b/i, 100],
+      [/\bandantino\b/i, 84],
+      [/\bandante\b/i, 74],
+      [/\badagietto\b/i, 64],
+      [/\badagio\b/i, 54],
+      [/\blento\b/i, 52],
+      [/\blargo\b/i, 48],
+      [/\bgrave\b/i, 44],
+    ];
+    const topDownItems = [...items]
+      .filter((it) => it.str && it.str.length >= 4)
+      .sort((a, b) => b.y - a.y || a.x - b.x);
+    for (const item of topDownItems) {
+      for (const [rx, tempoVal] of ITALIAN_TEMPOS) {
+        if (rx.test(item.str)) {
+          detectedBpm = tempoVal;
+          break;
+        }
+      }
+      if (detectedBpm !== undefined) break;
+    }
+  }
+  // If compound meter (6/8, 9/8, 12/8) is present on page 1 and tempo is <= 80 without explicit dot,
+  // MuseScore commonly writes dotted-quarter = 64 (= 96 quarter-note BPM)
+  const hasCompoundEighthSig =
+    items.some((it) => it.str.includes('\uE088')) &&
+    items.some((it) => it.str.includes('\uE086') || it.str.includes('\uE089') || it.str.includes('\uE081\uE082'));
+  if (detectedBpmRaw !== undefined && !detectedBpmHadDot && hasCompoundEighthSig && detectedBpmRaw <= 80) {
+    detectedBpm = Math.round(detectedBpmRaw * 1.5);
   }
   const bpm = detectedBpm ?? defaultBpm;
   const secPerBeat = 60 / bpm;
@@ -645,11 +687,26 @@ export function extractNotesFromSmuflItems(
 
           const totalEventBeats = events.reduce((acc, ev) => acc + ev.beats, 0);
           // Only use strict cumulative beats when the measure sums accurately to beatsPerMeasure;
-          // otherwise distribute proportionally across the measure to avoid dead end-of-measure gaps!
+          // otherwise detect uniform runs (e.g. steady triplets/8ths/16ths) or quantize to 12/beat
+          // (exact LCM of 16ths and triplets — eliminates limping/stuttering triplets!)
           const exactFit = Math.abs(totalEventBeats - beatsPerMeasure) <= 0.26;
           const firstEvX = events[0].x;
           const mSpan = Math.max(1, mb.xEnd - firstEvX);
 
+          let isUniformGrid = false;
+          if (!exactFit && events.length >= 4) {
+            const dxs: number[] = [];
+            for (let i = 1; i < events.length; i++) {
+              dxs.push(events[i].x - events[i - 1].x);
+            }
+            const sortedDxs = [...dxs].sort((a, b) => a - b);
+            const medDx = sortedDxs[Math.floor(sortedDxs.length / 2)] || 1;
+            const allEven = dxs.every((d) => d >= medDx * 0.62 && d <= medDx * 1.45);
+            const fillsMeasure = events[events.length - 1].x - firstEvX >= mSpan * 0.65;
+            isUniformGrid = allEven && fillsMeasure;
+          }
+
+          const gridSub = events.length >= 5 ? 12 : 4;
           let cumBeat = 0;
           const measureAccMap = new Map<number, number>(); // diatonic pitch -> measure-scoped accidental
           events.forEach((ev, evIdx) => {
@@ -657,9 +714,11 @@ export function extractNotesFromSmuflItems(
             if (exactFit) {
               beatOffset = cumBeat;
               cumBeat += ev.beats;
+            } else if (isUniformGrid) {
+              beatOffset = (evIdx / events.length) * beatsPerMeasure;
             } else {
-              const normX = Math.max(0, Math.min(0.95, (ev.x - firstEvX) / mSpan));
-              beatOffset = Math.round(normX * beatsPerMeasure * 4) / 4;
+              const normX = Math.max(0, Math.min(0.96, (ev.x - firstEvX) / mSpan));
+              beatOffset = Math.round(normX * beatsPerMeasure * gridSub) / gridSub;
             }
 
             if (ev.type === 'chord') {
@@ -667,9 +726,11 @@ export function extractNotesFromSmuflItems(
               const nextBeat = nextEv
                 ? exactFit
                   ? beatOffset + ev.beats
-                  : Math.round(Math.max(0, Math.min(0.95, (nextEv.x - firstEvX) / mSpan)) * beatsPerMeasure * 4) / 4
+                  : isUniformGrid
+                    ? ((evIdx + 1) / events.length) * beatsPerMeasure
+                    : Math.round(Math.max(0, Math.min(0.96, (nextEv.x - firstEvX) / mSpan)) * beatsPerMeasure * gridSub) / gridSub
                 : beatsPerMeasure;
-              const gapToNext = Math.max(0.25, nextBeat - beatOffset);
+              const gapToNext = Math.max(1 / gridSub, nextBeat - beatOffset);
 
               const seenMidis = new Set<number>();
               for (const item of ev.notes) {
@@ -739,7 +800,7 @@ export function extractNotesFromSmuflItems(
           : fontSize * 0.9;
       const pxPerBeat = Math.max(fontSize * 0.85, Math.min(fontSize * 3.2, refDx * 2));
       const quantizeBeat = (x: number) =>
-        Math.max(0, Math.round(((x - firstContentX) / pxPerBeat) * 4) / 4);
+        Math.max(0, Math.round(((x - firstContentX) / pxPerBeat) * 12) / 12);
 
       const clusterBeats = clusters.map((c) => quantizeBeat(c.x));
       let maxEndBeat = beatsPerMeasure;
@@ -819,21 +880,21 @@ export function extractNotesFromSmuflItems(
   if (geometry && geometry.ties.length > 0 && emittedNotes.length > 1) {
     for (const tie of geometry.ties) {
       const tieSpan = tie.x2 - tie.x1;
-      if (tieSpan > pageFontSize * 3.5) continue; // Long arcs are phrase slurs, not ties
+      if (tieSpan > pageFontSize * 4.5) continue; // Long arcs are phrase slurs, not ties
       let startIdx = -1;
       let endIdx = -1;
       for (let i = 0; i < emittedNotes.length; i++) {
         if (removedIndices.has(i)) continue;
         const n = emittedNotes[i];
-        if (Math.abs(n.pdfY - tie.y) > pageFontSize * 0.55) continue;
-        if (startIdx < 0 && Math.abs(n.pdfX - tie.x1) <= pageFontSize * 0.55) {
+        if (Math.abs(n.pdfY - tie.y) > pageFontSize * 0.75) continue;
+        if (startIdx < 0 && Math.abs(n.pdfX - tie.x1) <= pageFontSize * 0.75) {
           startIdx = i;
         } else if (
           startIdx >= 0 &&
           n.midi === emittedNotes[startIdx].midi &&
           n.hand === emittedNotes[startIdx].hand &&
           n.sysIdx === emittedNotes[startIdx].sysIdx &&
-          Math.abs(n.pdfX - tie.x2) <= pageFontSize * 0.55
+          Math.abs(n.pdfX - tie.x2) <= pageFontSize * 0.75
         ) {
           endIdx = i;
           break;
@@ -843,7 +904,7 @@ export function extractNotesFromSmuflItems(
         const a = emittedNotes[startIdx];
         const b = emittedNotes[endIdx];
         // Only merge if Note B starts close to when Note A ends
-        if (b.startTimeSec - (a.startTimeSec + a.durationSec) <= secPerBeat * 0.75) {
+        if (b.startTimeSec - (a.startTimeSec + a.durationSec) <= secPerBeat * 1.1) {
           const mergedEnd = Math.max(a.startTimeSec + a.durationSec, b.startTimeSec + b.durationSec);
           a.durationSec = mergedEnd - a.startTimeSec;
           removedIndices.add(endIdx);
