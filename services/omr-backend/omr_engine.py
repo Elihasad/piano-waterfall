@@ -45,7 +45,12 @@ class HomrEngine:
             pdf = pdfium.PdfDocument(pdf_path)
             try:
                 page = pdf[page_index]
-                bitmap = page.render(scale=200 / 72)
+                page_w, _page_h = page.get_size()
+                # Normalize render width to ~1650px (200 DPI A4) so huge MuseScore viewBoxes (e.g. 9921pt)
+                # never blow up memory or crash OpenCV/homr.
+                scale = 1650.0 / max(1.0, float(page_w))
+                scale = max(0.05, min(4.0, scale))
+                bitmap = page.render(scale=scale)
                 pil_image = bitmap.to_pil()
                 pil_image.save(img_path)
             finally:
@@ -56,11 +61,17 @@ class HomrEngine:
                 cwd=tmp_dir,
                 capture_output=True,
                 text=True,
-                timeout=180,
+                timeout=300,
                 check=False,
             )
             if proc.returncode != 0:
-                raise RuntimeError(f"homr failed on page {page_index + 1}: {proc.stderr.strip()}")
+                combined = "\n".join(
+                    line
+                    for line in (proc.stderr + "\n" + proc.stdout).replace("\r", "\n").splitlines()
+                    if line.strip() and not line.strip().startswith("Downloaded ")
+                )
+                tail = combined[-1000:] if combined else proc.stderr.strip()[-1000:]
+                raise RuntimeError(f"homr failed on page {page_index + 1}: {tail}")
 
             xml_candidates = list(Path(tmp_dir).glob("*.musicxml")) + list(Path(tmp_dir).glob("*.xml"))
             if not xml_candidates:

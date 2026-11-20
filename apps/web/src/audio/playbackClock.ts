@@ -35,6 +35,8 @@ export class PlaybackClock {
     right: { audio: true, visual: true },
   };
   private cursorTimeSec = -1;
+  private audioCursorSec = -1;
+  private static readonly AUDIO_LOOKAHEAD_REAL_SEC = 1.6;
 
   constructor(player: NotePlayer) {
     this.player = player;
@@ -46,6 +48,7 @@ export class PlaybackClock {
     this.isPlaying = false;
     this.currentTimeSec = 0;
     this.cursorTimeSec = -1;
+    this.audioCursorSec = -1;
     this.waitingMidis.clear();
     this.satisfiedWaitTimeSec = -1;
     this.loopEnabled = false;
@@ -58,7 +61,10 @@ export class PlaybackClock {
     if (this.currentTimeSec >= this.song.durationSec) {
       this.currentTimeSec = 0;
       this.cursorTimeSec = -1;
+      this.audioCursorSec = -1;
       this.satisfiedWaitTimeSec = -1;
+    } else {
+      this.audioCursorSec = this.currentTimeSec - 0.0001;
     }
     this.isPlaying = true;
     void this.player.unlock();
@@ -66,6 +72,7 @@ export class PlaybackClock {
 
   pause(): void {
     this.isPlaying = false;
+    this.audioCursorSec = -1;
     this.player.stopAll();
   }
 
@@ -88,6 +95,7 @@ export class PlaybackClock {
       this.currentTimeSec = 0;
     }
     this.cursorTimeSec = -1;
+    this.audioCursorSec = -1;
   }
 
   seek(timeSec: number): void {
@@ -97,6 +105,7 @@ export class PlaybackClock {
     this.satisfiedWaitTimeSec = -1;
     this.currentTimeSec = Math.max(0, Math.min(this.song.durationSec, timeSec));
     this.cursorTimeSec = this.currentTimeSec - 0.0001;
+    this.audioCursorSec = this.currentTimeSec - 0.0001;
   }
 
   stepMeasure(delta: -1 | 1): void {
@@ -123,11 +132,19 @@ export class PlaybackClock {
 
   setSpeedRatio(ratio: number): void {
     this.speedRatio = Math.max(0.25, Math.min(2.0, ratio));
+    if (this.isPlaying) {
+      this.player.stopAll();
+      this.audioCursorSec = this.currentTimeSec;
+    }
   }
 
   setTranspose(semitones: number): void {
     this.transpose = Math.max(-12, Math.min(12, Math.round(semitones)));
     this.waitingMidis.clear();
+    if (this.isPlaying) {
+      this.player.stopAll();
+      this.audioCursorSec = this.currentTimeSec;
+    }
   }
 
   setLoop(enabled: boolean, startMeasure?: number, endMeasure?: number): void {
@@ -142,6 +159,10 @@ export class PlaybackClock {
         Math.min(maxMeasure, Math.round(endMeasure)),
       );
     }
+    if (this.isPlaying) {
+      this.player.stopAll();
+      this.audioCursorSec = this.currentTimeSec;
+    }
   }
 
   setHands(hands: HandControlState): void {
@@ -150,12 +171,20 @@ export class PlaybackClock {
       right: { ...hands.right },
     };
     this.waitingMidis.clear();
+    if (this.isPlaying) {
+      this.player.stopAll();
+      this.audioCursorSec = this.currentTimeSec;
+    }
   }
 
   setPracticeMode(mode: PracticeMode): void {
     this.practiceMode = mode;
     this.waitingMidis.clear();
     this.satisfiedWaitTimeSec = -1;
+    if (this.isPlaying) {
+      this.player.stopAll();
+      this.audioCursorSec = this.currentTimeSec;
+    }
   }
 
   handleUserNoteOn(midi: number): void {
@@ -185,7 +214,12 @@ export class PlaybackClock {
     return { startSec: startM.startTimeSec, endSec: endM.endTimeSec };
   }
 
-  private triggerNotesInWindow(fromInclusive: number, toExclusive: number): void {
+  private triggerNotesInWindow(
+    fromInclusive: number,
+    toExclusive: number,
+    refSongTimeSec?: number,
+    audioNow?: number,
+  ): void {
     if (!this.song || toExclusive <= fromInclusive) return;
     for (const note of this.song.notes) {
       if (note.startTimeSec < fromInclusive) continue;
@@ -196,7 +230,11 @@ export class PlaybackClock {
 
       const pitchedMidi = clampMidi(note.midi + this.transpose);
       const scaledDuration = note.durationSec / this.speedRatio;
-      this.player.playNote(pitchedMidi, scaledDuration, note.velocity);
+      const startAtAudioTime =
+        audioNow !== undefined && refSongTimeSec !== undefined
+          ? audioNow + Math.max(0, (note.startTimeSec - refSongTimeSec) / this.speedRatio)
+          : undefined;
+      this.player.playNote(pitchedMidi, scaledDuration, note.velocity, startAtAudioTime);
     }
   }
 
@@ -263,6 +301,9 @@ export class PlaybackClock {
       }
     }
 
+    const audioNow = this.player.getAudioTime?.() ?? null;
+    const lookAheadSong = PlaybackClock.AUDIO_LOOKAHEAD_REAL_SEC * this.speedRatio;
+
     if (this.loopEnabled) {
       const { startSec, endSec } = this.getLoopBounds();
       const loopLen = Math.max(0.05, endSec - startSec);
@@ -272,25 +313,55 @@ export class PlaybackClock {
         this.triggerNotesInWindow(startSec, nextTime);
         this.currentTimeSec = nextTime;
         this.cursorTimeSec = nextTime;
+        this.audioCursorSec = nextTime;
         return this.getSnapshot();
       }
       if (nextTime >= endSec) {
-        this.triggerNotesInWindow(startWindow, endSec);
+        if (audioNow !== null && this.practiceMode === 'listen') {
+          const schedFrom = this.audioCursorSec < 0 ? startWindow : this.audioCursorSec;
+          this.triggerNotesInWindow(schedFrom, endSec, nextTime, audioNow);
+        } else {
+          this.triggerNotesInWindow(startWindow, endSec);
+        }
         const overflow = (nextTime - endSec) % loopLen;
         nextTime = startSec + overflow;
         this.satisfiedWaitTimeSec = -1;
-        this.triggerNotesInWindow(startSec, nextTime);
+        if (audioNow !== null && this.practiceMode === 'listen') {
+          const schedTo = Math.min(endSec, nextTime + lookAheadSong);
+          this.triggerNotesInWindow(startSec, schedTo, nextTime, audioNow);
+          this.audioCursorSec = schedTo;
+        } else {
+          this.triggerNotesInWindow(startSec, nextTime);
+          this.audioCursorSec = nextTime;
+        }
+        this.currentTimeSec = nextTime;
+        this.cursorTimeSec = nextTime;
+        return this.getSnapshot();
+      }
+      if (audioNow !== null && this.practiceMode === 'listen') {
+        const schedFrom = this.audioCursorSec < 0 ? startWindow : this.audioCursorSec;
+        const schedTo = Math.min(endSec, nextTime + lookAheadSong);
+        this.triggerNotesInWindow(schedFrom, schedTo, nextTime, audioNow);
+        this.audioCursorSec = Math.max(this.audioCursorSec, schedTo);
         this.currentTimeSec = nextTime;
         this.cursorTimeSec = nextTime;
         return this.getSnapshot();
       }
     }
 
-    this.triggerNotesInWindow(startWindow, nextTime);
+    if (audioNow !== null && this.practiceMode === 'listen') {
+      const schedFrom = this.audioCursorSec < 0 ? startWindow : this.audioCursorSec;
+      const schedTo = Math.min(this.song.durationSec + 0.01, nextTime + lookAheadSong);
+      this.triggerNotesInWindow(schedFrom, schedTo, nextTime, audioNow);
+      this.audioCursorSec = Math.max(this.audioCursorSec, schedTo);
+    } else {
+      this.triggerNotesInWindow(startWindow, nextTime);
+    }
 
     if (nextTime >= this.song.durationSec) {
       this.currentTimeSec = this.song.durationSec;
       this.cursorTimeSec = this.song.durationSec;
+      this.audioCursorSec = -1;
       this.isPlaying = false;
     } else {
       this.currentTimeSec = nextTime;

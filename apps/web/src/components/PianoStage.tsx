@@ -87,10 +87,23 @@ export const PianoStage: React.FC<PianoStageProps> = ({
     let lastTs = performance.now();
     let lastUiReport = 0;
 
-    const frame = (ts: number) => {
-      const rawDelta = Math.max(0, (ts - lastTs) / 1000);
-      lastTs = ts;
-      const clampedDelta = Math.min(rawDelta, 0.1);
+    // Background heartbeat so music continues smoothly when switching browser tabs
+    // (requestAnimationFrame pauses in hidden tabs, but setInterval + Web Audio lookahead keeps playing)
+    const bgTimer = window.setInterval(() => {
+      const now = performance.now();
+      const elapsed = Math.max(0, (now - lastTs) / 1000);
+      if (document.hidden || elapsed >= 0.25) {
+        lastTs = now;
+        const snap = clock.advance(Math.min(elapsed, 2.0));
+        onSnapshotTick(snap);
+      }
+    }, 200);
+
+    const frame = () => {
+      const now = performance.now();
+      const rawDelta = Math.max(0, (now - lastTs) / 1000);
+      lastTs = now;
+      const clampedDelta = Math.min(rawDelta, 0.25);
 
       const snap = clock.advance(clampedDelta);
 
@@ -132,8 +145,8 @@ export const PianoStage: React.FC<PianoStageProps> = ({
         });
       }
 
-      if (ts - lastUiReport > 100) {
-        lastUiReport = ts;
+      if (now - lastUiReport > 100) {
+        lastUiReport = now;
         onSnapshotTick(snap);
       }
 
@@ -141,7 +154,10 @@ export const PianoStage: React.FC<PianoStageProps> = ({
     };
 
     rafId = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(rafId);
+    return () => {
+      window.clearInterval(bgTimer);
+      cancelAnimationFrame(rafId);
+    };
   }, [
     song,
     clock,

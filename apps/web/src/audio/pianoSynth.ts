@@ -5,6 +5,7 @@ export interface NotePlayer {
   unlock(): Promise<void>;
   setPreset(preset: SoundPreset): void;
   getPreset(): SoundPreset;
+  getAudioTime?(): number | null;
   playNote(midi: number, durationSec: number, velocity?: number, startAtAudioTime?: number): void;
   stopAll(): void;
 }
@@ -13,7 +14,7 @@ interface ActiveVoice {
   stop: () => void;
 }
 
-const MAX_POLYPHONY = 32;
+const MAX_POLYPHONY = 64;
 
 const SALAMANDER_SAMPLES: ReadonlyArray<{ midi: number; file: string }> = [
   { midi: 33, file: 'A1.mp3' },
@@ -190,6 +191,11 @@ export class PianoSynth implements NotePlayer {
 
   getPreset(): SoundPreset {
     return this.preset;
+  }
+
+  getAudioTime(): number | null {
+    const ctx = this.ensureContext();
+    return ctx ? ctx.currentTime : null;
   }
 
   async unlock(): Promise<void> {
