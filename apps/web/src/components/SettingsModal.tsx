@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { X, CheckCircle2, AlertCircle, Loader2, Usb } from 'lucide-react';
+import { X, Usb } from 'lucide-react';
 import { t } from '../core/i18n';
-import { checkOmrHealth } from '../core/omrClient';
 import type { AppSettings, Language, SoundPreset } from '../core/types';
 
 interface SettingsModalProps {
@@ -23,32 +22,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const [language, setLanguage] = useState<Language>(settings.language);
   const [soundPreset, setSoundPreset] = useState<SoundPreset>(settings.soundPreset);
-  const [omrUrl, setOmrUrl] = useState(settings.omrServerUrl);
   const [showKeyLabels, setShowKeyLabels] = useState(settings.showKeyLabels);
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
-
-  const handleTest = async () => {
-    setTesting(true);
-    setTestResult(null);
-    const res = await checkOmrHealth(omrUrl);
-    setTesting(false);
-    if (res.ok) {
-      setTestResult({
-        ok: true,
-        text: `Connected! (Engine: ${res.engine || 'homr'})`,
-      });
-    } else {
-      setTestResult({ ok: false, text: res.error || 'Connection failed.' });
-    }
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave({
       language,
       soundPreset,
-      omrServerUrl: omrUrl.trim(),
       showKeyLabels,
     });
     onClose();
@@ -166,50 +146,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               className="w-4 h-4 accent-violet-500"
             />
           </label>
-
-          {/* Optional Cloud OMR URL */}
-          <div className="space-y-1.5">
-            <label className="block font-semibold text-slate-200">{t(language, 'omrUrlLabel')}</label>
-            <input
-              type="url"
-              value={omrUrl}
-              onChange={(e) => setOmrUrl(e.target.value)}
-              placeholder="https://your-space.hf.space"
-              className="w-full rounded-lg bg-[#121216] border border-[#2c2e3b] px-3 py-2 text-slate-100 placeholder:text-slate-500"
-            />
-            <p className="text-[11px] text-slate-400 leading-relaxed">{t(language, 'omrUrlDesc')}</p>
-
-            {omrUrl.trim() && (
-              <div className="flex items-center gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={handleTest}
-                  disabled={testing}
-                  className="px-3 py-1.5 rounded-lg bg-[#242632] hover:bg-[#2f3242] text-slate-200 font-semibold flex items-center gap-1.5"
-                >
-                  {testing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  {t(language, 'testConnection')}
-                </button>
-              </div>
-            )}
-
-            {testResult && (
-              <div
-                className={`flex items-start gap-1.5 p-2 rounded-lg text-[11px] ${
-                  testResult.ok
-                    ? 'bg-emerald-950/50 text-emerald-300 border border-emerald-500/30'
-                    : 'bg-rose-950/50 text-rose-300 border border-rose-500/30'
-                }`}
-              >
-                {testResult.ok ? (
-                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                ) : (
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                )}
-                <span>{testResult.text}</span>
-              </div>
-            )}
-          </div>
         </div>
 
         <div className="flex justify-end gap-2 px-4 py-3 border-t border-[#2c2e3b]">

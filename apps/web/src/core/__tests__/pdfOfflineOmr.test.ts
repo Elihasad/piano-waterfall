@@ -66,4 +66,37 @@ describe('pdfOfflineOmr', () => {
     expect(extracted.notes.some((n) => n.hand === 'left' && n.midi === 43)).toBe(true);
     expect(extracted.notes.some((n) => n.hand === 'right' && n.midi === 67)).toBe(true);
   });
+
+  it('detects thin anti-aliased light-gray staff lines and rejects vertical barlines', () => {
+    const width = 400;
+    const height = 160;
+    const gray = new Uint8Array(width * height).fill(255);
+
+    // Draw thin anti-aliased light-gray staff lines (gray = 205 on white 255)
+    for (let line = 0; line < 5; line++) {
+      const y = 40 + line * 10;
+      for (let x = 40; x < 360; x++) {
+        gray[y * width + x] = 205;
+      }
+    }
+    // Draw a thin vertical barline at x = 180 (must NOT be misread as a notehead)
+    for (let y = 40; y <= 80; y++) {
+      gray[y * width + 180] = 20;
+    }
+    // Draw a real filled notehead at x = 120, y = 70 (G4 = MIDI 67)
+    for (let dy = -5; dy <= 5; dy++) {
+      for (let dx = -6; dx <= 6; dx++) {
+        if ((dx * dx) / 36 + (dy * dy) / 25 <= 1) {
+          gray[(70 + dy) * width + (120 + dx)] = 15;
+        }
+      }
+    }
+
+    const staves = detectStavesFromGrayscale(gray, width, height);
+    expect(staves).toHaveLength(1);
+
+    const extracted = extractNotesFromGrayscalePage(gray, width, height, 1, 0, 100);
+    expect(extracted.notes).toHaveLength(1);
+    expect(extracted.notes[0].midi).toBe(67);
+  });
 });
