@@ -15,6 +15,7 @@ interface PianoStageProps {
   showKeyLabels: boolean;
   effectsEnabled: boolean;
   fullKeyboard: boolean;
+  externalPressedMidis: Set<number>;
   onSnapshotTick: (snapshot: PlaybackSnapshot) => void;
 }
 
@@ -29,6 +30,7 @@ export const PianoStage: React.FC<PianoStageProps> = ({
   showKeyLabels,
   effectsEnabled,
   fullKeyboard,
+  externalPressedMidis,
   onSnapshotTick,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -65,7 +67,7 @@ export const PianoStage: React.FC<PianoStageProps> = ({
     return () => window.removeEventListener('resize', update);
   }, []);
 
-  const keyboardHeight = Math.max(76, Math.min(132, Math.floor(size.height * 0.27)));
+  const keyboardHeight = Math.max(80, Math.min(136, Math.floor(size.height * 0.28)));
   const waterfallHeight = Math.max(120, size.height - keyboardHeight);
 
   const keyRange = useMemo(() => {
@@ -104,6 +106,9 @@ export const PianoStage: React.FC<PianoStageProps> = ({
         }
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
+        const combinedPressed = new Set<number>(manualPressedRef.current);
+        for (const m of externalPressedMidis) combinedPressed.add(m);
+
         renderWaterfallFrame(ctx, {
           song,
           layout,
@@ -121,7 +126,8 @@ export const PianoStage: React.FC<PianoStageProps> = ({
           loopStartMeasure: snap.loopStartMeasure,
           loopEndMeasure: snap.loopEndMeasure,
           particles: particlesRef.current,
-          manualPressedMidis: manualPressedRef.current,
+          manualPressedMidis: combinedPressed,
+          waitingMidis: new Set(snap.waitingMidis),
           isPlaying: snap.isPlaying,
         });
       }
@@ -147,6 +153,7 @@ export const PianoStage: React.FC<PianoStageProps> = ({
     noteLabelMode,
     showKeyLabels,
     effectsEnabled,
+    externalPressedMidis,
     onSnapshotTick,
   ]);
 
@@ -160,13 +167,17 @@ export const PianoStage: React.FC<PianoStageProps> = ({
       if (midi !== null) {
         void player.unlock();
         player.playNote(midi, 0.85, 0.85);
+        clock.handleUserNoteOn(midi);
         manualPressedRef.current.add(midi);
-        setTimeout(() => manualPressedRef.current.delete(midi), 320);
+        setTimeout(() => {
+          manualPressedRef.current.delete(midi);
+          clock.handleUserNoteOff(midi);
+        }, 320);
+        onSnapshotTick(clock.getSnapshot());
       }
       return;
     }
 
-    // Touch-drag vertically on waterfall to scrub phrase-by-phrase
     const snap = clock.getSnapshot();
     scrubRef.current = {
       active: true,
@@ -184,7 +195,6 @@ export const PianoStage: React.FC<PianoStageProps> = ({
     const y = e.clientY - rect.top;
     const dy = y - scrubRef.current.startY;
     const pxPerSec = waterfallHeight / LOOK_AHEAD_SEC;
-    // Dragging down moves forward in the song (pulling notes down toward the keys)
     const nextTime = scrubRef.current.startTimeSec + dy / pxPerSec;
     clock.seek(nextTime);
     onSnapshotTick(clock.getSnapshot());

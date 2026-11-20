@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RotateCw } from 'lucide-react';
+import { MidiInputManager, type MidiDeviceState } from './audio/midiInput';
 import { PianoSynth } from './audio/pianoSynth';
 import { PlaybackClock, type PlaybackSnapshot } from './audio/playbackClock';
 import { LibraryModal } from './components/LibraryModal';
 import { PianoStage } from './components/PianoStage';
 import { SettingsModal } from './components/SettingsModal';
 import { TopBar } from './components/TopBar';
+import { t } from './core/i18n';
 import {
   deleteSong,
   getSettings,
@@ -13,7 +15,14 @@ import {
   saveSong,
   seedDemoSongsIfEmpty,
 } from './core/storage';
-import type { AppSettings, HandControlState, NoteLabelMode, Song } from './core/types';
+import type {
+  AppSettings,
+  HandControlState,
+  NoteLabelMode,
+  PracticeMode,
+  Song,
+  SoundPreset,
+} from './core/types';
 import { DEMO_SONGS } from './data/demoSongs';
 
 const LABEL_CYCLE: NoteLabelMode[] = ['letters', 'solfege', 'off'];
@@ -24,11 +33,21 @@ export default function App() {
 
   const [songs, setSongs] = useState<Song[]>(DEMO_SONGS);
   const [currentSong, setCurrentSong] = useState<Song>(DEMO_SONGS[0]);
-  const [settings, setSettings] = useState<AppSettings>(() => getSettings());
+  const [settings, setSettings] = useState<AppSettings>(() => {
+    const loaded = getSettings();
+    player.setPreset(loaded.soundPreset);
+    return loaded;
+  });
   const [fullKeyboard, setFullKeyboard] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [isPortraitMobile, setIsPortraitMobile] = useState(false);
+  const [midiState, setMidiState] = useState<MidiDeviceState>({
+    supported: false,
+    connectedNames: [],
+  });
+  const externalPressedRef = useRef<Set<number>>(new Set());
+  const midiManagerRef = useRef<MidiInputManager | null>(null);
 
   const [snapshot, setSnapshot] = useState<PlaybackSnapshot>(() => {
     clock.loadSong(DEMO_SONGS[0]);
@@ -48,6 +67,33 @@ export default function App() {
       mounted = false;
     };
   }, [clock]);
+
+  const connectMidi = useCallback(() => {
+    midiManagerRef.current?.disconnect();
+    const manager = new MidiInputManager({
+      onNoteOn: (midi, velocity) => {
+        externalPressedRef.current.add(midi);
+        void player.unlock();
+        player.playNote(midi, 1.2, velocity);
+        clock.handleUserNoteOn(midi);
+        setSnapshot(clock.getSnapshot());
+      },
+      onNoteOff: (midi) => {
+        externalPressedRef.current.delete(midi);
+        clock.handleUserNoteOff(midi);
+      },
+      onDevicesChange: (state) => {
+        setMidiState(state);
+      },
+    });
+    midiManagerRef.current = manager;
+    void manager.connect();
+  }, [clock, player]);
+
+  useEffect(() => {
+    connectMidi();
+    return () => midiManagerRef.current?.disconnect();
+  }, [connectMidi]);
 
   useEffect(() => {
     const checkOrientation = () => {
@@ -75,20 +121,40 @@ export default function App() {
   const handleDeleteSong = useCallback(
     async (id: string) => {
       await deleteSong(id);
-      setSongs((prev) => {
-        const next = prev.filter((s) => s.id !== id);
-        if (currentSong.id === id && next.length > 0) {
-          selectSong(next[0]);
-        }
-        return next;
-      });
+      const next = songs.filter((s) => s.id !== id);
+      setSongs(next);
+      if (currentSong.id === id && next.length > 0) {
+        selectSong(next[0]);
+      }
     },
-    [currentSong.id, selectSong],
+    [songs, currentSong.id, selectSong],
   );
 
-  const handleUpdateSettings = useCallback((partial: Partial<AppSettings>) => {
-    setSettings(saveSettings(partial));
-  }, []);
+  const handleUpdateSettings = useCallback(
+    (partial: Partial<AppSettings>) => {
+      const updated = saveSettings(partial);
+      if (partial.soundPreset) {
+        player.setPreset(partial.soundPreset);
+      }
+      setSettings(updated);
+    },
+    [player],
+  );
+
+  const handleSoundPresetChange = useCallback(
+    (preset: SoundPreset) => {
+      handleUpdateSettings({ soundPreset: preset });
+    },
+    [handleUpdateSettings],
+  );
+
+  const handlePracticeModeChange = useCallback(
+    (mode: PracticeMode) => {
+      clock.setPracticeMode(mode);
+      setSnapshot(clock.getSnapshot());
+    },
+    [clock],
+  );
 
   const handleTogglePlay = useCallback(() => {
     clock.togglePlay();
@@ -158,6 +224,7 @@ export default function App() {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (showLibrary || showSettings) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
       if (e.code === 'Space') {
@@ -191,6 +258,7 @@ export default function App() {
   return (
     <div className="flex flex-col w-full h-full bg-[#121216] text-slate-100">
       <TopBar
+        language={settings.language}
         song={currentSong}
         isPlaying={snapshot.isPlaying}
         currentTimeSec={snapshot.currentTimeSec}
@@ -199,6 +267,10 @@ export default function App() {
         loopEnabled={snapshot.loopEnabled}
         loopStartMeasure={snapshot.loopStartMeasure}
         loopEndMeasure={snapshot.loopEndMeasure}
+        practiceMode={snapshot.practiceMode}
+        waitingMidis={snapshot.waitingMidis}
+        midiDevices={midiState.connectedNames}
+        soundPreset={settings.soundPreset}
         hands={snapshot.hands}
         noteLabelMode={settings.noteLabelMode}
         effectsEnabled={settings.effectsEnabled}
@@ -210,6 +282,8 @@ export default function App() {
         onSpeedChange={handleSpeedChange}
         onTransposeChange={handleTransposeChange}
         onLoopChange={handleLoopChange}
+        onPracticeModeChange={handlePracticeModeChange}
+        onSoundPresetChange={handleSoundPresetChange}
         onHandsChange={handleHandsChange}
         onCycleNoteLabelMode={handleCycleNoteLabelMode}
         onToggleEffects={() => handleUpdateSettings({ effectsEnabled: !settings.effectsEnabled })}
@@ -221,7 +295,7 @@ export default function App() {
       {isPortraitMobile && (
         <div className="bg-violet-950/70 border-b border-violet-500/40 px-3 py-1.5 text-[11px] text-violet-200 flex items-center justify-center gap-1.5">
           <RotateCw className="w-3.5 h-3.5" />
-          <span>Xoay ngang điện thoại để xem phím đàn & tên nốt rõ nhất!</span>
+          <span>{t(settings.language, 'portraitHint')}</span>
         </div>
       )}
 
@@ -234,11 +308,13 @@ export default function App() {
         showKeyLabels={settings.showKeyLabels}
         effectsEnabled={settings.effectsEnabled}
         fullKeyboard={fullKeyboard}
+        externalPressedMidis={externalPressedRef.current}
         onSnapshotTick={setSnapshot}
       />
 
       {showLibrary && (
         <LibraryModal
+          language={settings.language}
           songs={songs}
           currentSongId={currentSong.id}
           omrServerUrl={settings.omrServerUrl}
@@ -253,6 +329,9 @@ export default function App() {
       {showSettings && (
         <SettingsModal
           settings={settings}
+          midiDevices={midiState.connectedNames}
+          midiSupported={midiState.supported}
+          onReconnectMidi={connectMidi}
           onSave={handleUpdateSettings}
           onClose={() => setShowSettings(false)}
         />

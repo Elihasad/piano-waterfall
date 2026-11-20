@@ -5,8 +5,15 @@ import type { Song } from '../../core/types';
 
 function createFakePlayer() {
   const calls: Array<{ midi: number; durationSec: number; velocity: number }> = [];
+  let preset: 'grand' | 'studio' | 'bright' | 'electric' = 'grand';
   const player: NotePlayer = {
     async unlock() {},
+    setPreset(p) {
+      preset = p;
+    },
+    getPreset() {
+      return preset;
+    },
     playNote(midi, durationSec, velocity = 0.8) {
       calls.push({ midi, durationSec, velocity });
     },
@@ -112,5 +119,32 @@ describe('PlaybackClock', () => {
     const snap = clock.advance(0.1);
     expect(snap.currentTimeSec).toBeCloseTo(0.1, 3);
     expect(calls.map((c) => c.midi)).toEqual([60, 48]);
+  });
+
+  it('pauses in Wait Mode until all required chord keys are pressed via MIDI/user input', () => {
+    const { player } = createFakePlayer();
+    const clock = new PlaybackClock(player);
+    clock.loadSong(TEST_SONG);
+    clock.setPracticeMode('wait');
+    clock.play();
+
+    // Advance hits chord at t=0 (MIDI 60 + 48) and freezes
+    const waitingSnap = clock.advance(0.2);
+    expect(waitingSnap.currentTimeSec).toBeCloseTo(0, 3);
+    expect(waitingSnap.waitingMidis.sort((a, b) => a - b)).toEqual([48, 60]);
+
+    // Wrong key keeps waiting
+    clock.handleUserNoteOn(62);
+    expect(clock.advance(0.2).currentTimeSec).toBeCloseTo(0, 3);
+
+    // Pressing only one of the two chord keys keeps waiting for the second
+    clock.handleUserNoteOn(60);
+    expect(clock.getSnapshot().waitingMidis).toEqual([48]);
+    expect(clock.advance(0.2).currentTimeSec).toBeCloseTo(0, 3);
+
+    // Pressing the second key clears wait and advances cleanly
+    clock.handleUserNoteOn(48);
+    expect(clock.getSnapshot().waitingMidis).toEqual([]);
+    expect(clock.advance(0.2).currentTimeSec).toBeCloseTo(0.2, 3);
   });
 });

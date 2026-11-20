@@ -8,6 +8,8 @@ const STORE_SONGS = 'songs';
 const SETTINGS_KEY = 'piano-waterfall-settings';
 
 const DEFAULT_SETTINGS: AppSettings = {
+  language: 'en',
+  soundPreset: 'grand',
   omrServerUrl: '',
   noteLabelMode: 'letters',
   showKeyLabels: true,

@@ -1,5 +1,5 @@
 import { clampMidi } from '../core/noteNames';
-import type { HandControlState, NoteEvent, Song } from '../core/types';
+import type { HandControlState, NoteEvent, PracticeMode, Song } from '../core/types';
 import type { NotePlayer } from './pianoSynth';
 
 export interface PlaybackSnapshot {
@@ -10,6 +10,8 @@ export interface PlaybackSnapshot {
   loopEnabled: boolean;
   loopStartMeasure: number;
   loopEndMeasure: number;
+  practiceMode: PracticeMode;
+  waitingMidis: number[];
   hands: HandControlState;
   activeNotes: NoteEvent[];
 }
@@ -24,6 +26,10 @@ export class PlaybackClock {
   private loopEnabled = false;
   private loopStartMeasure = 1;
   private loopEndMeasure = 1;
+  private practiceMode: PracticeMode = 'listen';
+  private waitingMidis = new Set<number>();
+  private satisfiedWaitTimeSec = -1;
+  private heldUserMidis = new Set<number>();
   private hands: HandControlState = {
     left: { audio: true, visual: true },
     right: { audio: true, visual: true },
@@ -40,6 +46,8 @@ export class PlaybackClock {
     this.isPlaying = false;
     this.currentTimeSec = 0;
     this.cursorTimeSec = -1;
+    this.waitingMidis.clear();
+    this.satisfiedWaitTimeSec = -1;
     this.loopEnabled = false;
     this.loopStartMeasure = 1;
     this.loopEndMeasure = Math.min(4, Math.max(1, song.measures.length));
@@ -50,6 +58,7 @@ export class PlaybackClock {
     if (this.currentTimeSec >= this.song.durationSec) {
       this.currentTimeSec = 0;
       this.cursorTimeSec = -1;
+      this.satisfiedWaitTimeSec = -1;
     }
     this.isPlaying = true;
     void this.player.unlock();
@@ -70,6 +79,8 @@ export class PlaybackClock {
 
   restart(): void {
     this.player.stopAll();
+    this.waitingMidis.clear();
+    this.satisfiedWaitTimeSec = -1;
     if (this.loopEnabled && this.song) {
       const { startSec } = this.getLoopBounds();
       this.currentTimeSec = startSec;
@@ -82,6 +93,8 @@ export class PlaybackClock {
   seek(timeSec: number): void {
     if (!this.song) return;
     this.player.stopAll();
+    this.waitingMidis.clear();
+    this.satisfiedWaitTimeSec = -1;
     this.currentTimeSec = Math.max(0, Math.min(this.song.durationSec, timeSec));
     this.cursorTimeSec = this.currentTimeSec - 0.0001;
   }
@@ -90,14 +103,16 @@ export class PlaybackClock {
     if (!this.song || this.song.measures.length === 0) return;
     const measures = this.song.measures;
     let currentIdx = measures.findIndex(
-      (m) => this.currentTimeSec >= m.startTimeSec - 0.005 && this.currentTimeSec < m.endTimeSec - 0.005,
+      (m) =>
+        this.currentTimeSec >= m.startTimeSec - 0.005 &&
+        this.currentTimeSec < m.endTimeSec - 0.005,
     );
     if (currentIdx === -1) {
-      currentIdx = this.currentTimeSec >= measures[measures.length - 1].startTimeSec ? measures.length - 1 : 0;
+      currentIdx =
+        this.currentTimeSec >= measures[measures.length - 1].startTimeSec ? measures.length - 1 : 0;
     }
 
     if (delta === -1 && this.currentTimeSec - measures[currentIdx].startTimeSec > 0.25) {
-      // Jump to start of current measure if already partway through it
       this.seek(measures[currentIdx].startTimeSec);
       return;
     }
@@ -112,6 +127,7 @@ export class PlaybackClock {
 
   setTranspose(semitones: number): void {
     this.transpose = Math.max(-12, Math.min(12, Math.round(semitones)));
+    this.waitingMidis.clear();
   }
 
   setLoop(enabled: boolean, startMeasure?: number, endMeasure?: number): void {
@@ -121,7 +137,10 @@ export class PlaybackClock {
       this.loopStartMeasure = Math.max(1, Math.min(maxMeasure, Math.round(startMeasure)));
     }
     if (endMeasure !== undefined) {
-      this.loopEndMeasure = Math.max(this.loopStartMeasure, Math.min(maxMeasure, Math.round(endMeasure)));
+      this.loopEndMeasure = Math.max(
+        this.loopStartMeasure,
+        Math.min(maxMeasure, Math.round(endMeasure)),
+      );
     }
   }
 
@@ -130,6 +149,29 @@ export class PlaybackClock {
       left: { ...hands.left },
       right: { ...hands.right },
     };
+    this.waitingMidis.clear();
+  }
+
+  setPracticeMode(mode: PracticeMode): void {
+    this.practiceMode = mode;
+    this.waitingMidis.clear();
+    this.satisfiedWaitTimeSec = -1;
+  }
+
+  handleUserNoteOn(midi: number): void {
+    const clamped = clampMidi(midi);
+    this.heldUserMidis.add(clamped);
+    if (this.waitingMidis.has(clamped)) {
+      this.waitingMidis.delete(clamped);
+      if (this.waitingMidis.size === 0) {
+        this.satisfiedWaitTimeSec = this.currentTimeSec;
+        this.cursorTimeSec = this.currentTimeSec + 0.0001;
+      }
+    }
+  }
+
+  handleUserNoteOff(midi: number): void {
+    this.heldUserMidis.delete(clampMidi(midi));
   }
 
   private getLoopBounds(): { startSec: number; endSec: number } {
@@ -158,8 +200,43 @@ export class PlaybackClock {
     }
   }
 
+  private findNextWaitEvent(fromInclusive: number, toExclusive: number): {
+    timeSec: number;
+    requiredMidis: number[];
+  } | null {
+    if (!this.song) return null;
+    let eventTime = -1;
+    const required = new Set<number>();
+
+    for (const note of this.song.notes) {
+      if (note.startTimeSec < fromInclusive) continue;
+      if (note.startTimeSec >= toExclusive) break;
+      if (Math.abs(note.startTimeSec - this.satisfiedWaitTimeSec) < 0.005) continue;
+
+      const isVisible = note.hand === 'left' ? this.hands.left.visual : this.hands.right.visual;
+      if (!isVisible) continue;
+
+      if (eventTime < 0) {
+        eventTime = note.startTimeSec;
+      }
+      if (Math.abs(note.startTimeSec - eventTime) <= 0.02) {
+        required.add(clampMidi(note.midi + this.transpose));
+      } else {
+        break;
+      }
+    }
+
+    if (eventTime < 0 || required.size === 0) return null;
+    return { timeSec: eventTime, requiredMidis: Array.from(required) };
+  }
+
   advance(deltaRealSec: number): PlaybackSnapshot {
     if (!this.song || !this.isPlaying || deltaRealSec <= 0) {
+      return this.getSnapshot();
+    }
+
+    // In Wait Mode, freeze playhead until user presses all waiting keys
+    if (this.practiceMode === 'wait' && this.waitingMidis.size > 0) {
       return this.getSnapshot();
     }
 
@@ -168,12 +245,30 @@ export class PlaybackClock {
     const startWindow = this.cursorTimeSec < 0 ? prevTime : this.cursorTimeSec;
     let nextTime = prevTime + deltaSongSec;
 
+    if (this.practiceMode === 'wait') {
+      const waitEvent = this.findNextWaitEvent(startWindow, nextTime);
+      if (waitEvent) {
+        this.currentTimeSec = waitEvent.timeSec;
+        this.cursorTimeSec = waitEvent.timeSec;
+        this.waitingMidis = new Set(waitEvent.requiredMidis);
+        // Remove keys already held down
+        for (const held of this.heldUserMidis) {
+          this.waitingMidis.delete(held);
+        }
+        if (this.waitingMidis.size === 0) {
+          this.satisfiedWaitTimeSec = waitEvent.timeSec;
+          this.cursorTimeSec = waitEvent.timeSec + 0.0001;
+        }
+        return this.getSnapshot();
+      }
+    }
+
     if (this.loopEnabled) {
       const { startSec, endSec } = this.getLoopBounds();
       const loopLen = Math.max(0.05, endSec - startSec);
       if (prevTime >= endSec) {
-        // Playhead was already past loop end when loop was enabled: jump cleanly to loop start
         nextTime = startSec + Math.min(deltaSongSec, loopLen);
+        this.satisfiedWaitTimeSec = -1;
         this.triggerNotesInWindow(startSec, nextTime);
         this.currentTimeSec = nextTime;
         this.cursorTimeSec = nextTime;
@@ -183,6 +278,7 @@ export class PlaybackClock {
         this.triggerNotesInWindow(startWindow, endSec);
         const overflow = (nextTime - endSec) % loopLen;
         nextTime = startSec + overflow;
+        this.satisfiedWaitTimeSec = -1;
         this.triggerNotesInWindow(startSec, nextTime);
         this.currentTimeSec = nextTime;
         this.cursorTimeSec = nextTime;
@@ -228,6 +324,8 @@ export class PlaybackClock {
       loopEnabled: this.loopEnabled,
       loopStartMeasure: this.loopStartMeasure,
       loopEndMeasure: this.loopEndMeasure,
+      practiceMode: this.practiceMode,
+      waitingMidis: Array.from(this.waitingMidis),
       hands: {
         left: { ...this.hands.left },
         right: { ...this.hands.right },

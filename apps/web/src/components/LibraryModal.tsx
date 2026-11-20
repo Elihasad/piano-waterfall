@@ -1,10 +1,13 @@
 import React, { useRef, useState } from 'react';
 import { Upload, Music, Trash2, X, FileText, Loader2, AlertCircle, Settings } from 'lucide-react';
+import { t } from '../core/i18n';
 import { convertPdfWithProgress, type OmrProgress } from '../core/omrClient';
 import { parseMusicXml, parseSongFile } from '../core/parsers';
-import type { Song } from '../core/types';
+import { parsePdfOffline } from '../core/parsers/pdfOfflineOmr';
+import type { Language, Song } from '../core/types';
 
 interface LibraryModalProps {
+  language: Language;
   songs: Song[];
   currentSongId: string;
   omrServerUrl: string;
@@ -16,6 +19,7 @@ interface LibraryModalProps {
 }
 
 export const LibraryModal: React.FC<LibraryModalProps> = ({
+  language,
   songs,
   currentSongId,
   omrServerUrl,
@@ -27,6 +31,7 @@ export const LibraryModal: React.FC<LibraryModalProps> = ({
 }) => {
   const [error, setError] = useState<string | null>(null);
   const [omrProgress, setOmrProgress] = useState<OmrProgress | null>(null);
+  const [pdfMode, setPdfMode] = useState<'offline' | 'cloud'>('offline');
   const [busy, setBusy] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -39,19 +44,37 @@ export const LibraryModal: React.FC<LibraryModalProps> = ({
     setBusy(true);
     try {
       if (file.name.toLowerCase().endsWith('.pdf')) {
-        const controller = new AbortController();
-        abortRef.current = controller;
-        setOmrProgress({ status: 'queued', currentPage: 0, totalPages: 0 });
-        const xmlText = await convertPdfWithProgress(
-          omrServerUrl,
-          file,
-          (p) => setOmrProgress(p),
-          controller.signal,
-        );
-        const song = parseMusicXml(xmlText, file.name, 'pdf');
-        await onImportSong(song);
-        onSelectSong(song);
-        onClose();
+        if (omrServerUrl.trim()) {
+          // Use configured Cloud OMR server if user set one
+          setPdfMode('cloud');
+          const controller = new AbortController();
+          abortRef.current = controller;
+          setOmrProgress({ status: 'queued', currentPage: 0, totalPages: 0 });
+          const xmlText = await convertPdfWithProgress(
+            omrServerUrl,
+            file,
+            (p) => setOmrProgress(p),
+            controller.signal,
+          );
+          const song = parseMusicXml(xmlText, file.name, 'pdf');
+          await onImportSong(song);
+          onSelectSong(song);
+          onClose();
+        } else {
+          // 100% Offline in-app PDF sheet music reader (Beta OMR)
+          setPdfMode('offline');
+          setOmrProgress({ status: 'processing', currentPage: 1, totalPages: 1 });
+          const song = await parsePdfOffline(file, (p) =>
+            setOmrProgress({
+              status: 'processing',
+              currentPage: p.currentPage,
+              totalPages: p.totalPages,
+            }),
+          );
+          await onImportSong(song);
+          onSelectSong(song);
+          onClose();
+        }
       } else {
         const song = await parseSongFile(file);
         await onImportSong(song);
@@ -59,7 +82,7 @@ export const LibraryModal: React.FC<LibraryModalProps> = ({
         onClose();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không thể nhập bản nhạc.');
+      setError(err instanceof Error ? err.message : 'Failed to import sheet music.');
     } finally {
       abortRef.current = null;
       setOmrProgress(null);
@@ -78,12 +101,12 @@ export const LibraryModal: React.FC<LibraryModalProps> = ({
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#2c2e3b]">
           <div className="flex items-center gap-2">
             <Music className="w-5 h-5 text-violet-400" />
-            <h2 className="text-sm font-bold text-slate-100">Thư viện bản nhạc (Offline)</h2>
+            <h2 className="text-sm font-bold text-slate-100">{t(language, 'libraryTitle')}</h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Đóng thư viện"
+            aria-label={t(language, 'close')}
             className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#242632] text-slate-400"
           >
             <X className="w-4 h-4" />
@@ -95,34 +118,37 @@ export const LibraryModal: React.FC<LibraryModalProps> = ({
           <label className="flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl border-2 border-dashed border-violet-500/50 bg-violet-950/20 hover:bg-violet-950/35 cursor-pointer transition">
             <Upload className="w-4 h-4 text-violet-300" />
             <span className="text-xs font-semibold text-violet-200">
-              Tải bản nhạc lên (.musicxml, .xml, .mxl, .mid, .pdf)
+              {t(language, 'uploadLabel')}
             </span>
             <input
               type="file"
-              aria-label="Tải bản nhạc lên"
+              aria-label={t(language, 'uploadLabel')}
               accept=".musicxml,.xml,.mxl,.mid,.midi,.pdf,*/*"
               disabled={busy}
               onChange={handleFileChange}
               className="hidden"
             />
           </label>
+          <p className="text-[11px] text-slate-400 leading-relaxed">{t(language, 'pdfOfflineHint')}</p>
 
           {omrProgress && (
             <div className="rounded-xl bg-[#121216] border border-[#2c2e3b] p-3 space-y-2">
               <div className="flex items-center justify-between text-xs text-cyan-300">
                 <span className="flex items-center gap-1.5">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  {omrProgress.totalPages > 0
-                    ? `Đang nhận diện PDF: trang ${omrProgress.currentPage}/${omrProgress.totalPages}...`
-                    : 'Đang gửi file PDF lên máy chủ OMR...'}
+                  {pdfMode === 'offline'
+                    ? `${t(language, 'pdfOfflineReading')}: ${t(language, 'pdfPageProgress')} ${omrProgress.currentPage}/${omrProgress.totalPages}...`
+                    : `${t(language, 'pdfCloudReading')}: ${t(language, 'pdfPageProgress')} ${omrProgress.currentPage}/${omrProgress.totalPages}...`}
                 </span>
-                <button
-                  type="button"
-                  onClick={handleCancelPdf}
-                  className="text-rose-400 hover:underline font-semibold"
-                >
-                  Hủy
-                </button>
+                {pdfMode === 'cloud' && (
+                  <button
+                    type="button"
+                    onClick={handleCancelPdf}
+                    className="text-rose-400 hover:underline font-semibold"
+                  >
+                    {t(language, 'cancel')}
+                  </button>
+                )}
               </div>
               {omrProgress.totalPages > 0 && (
                 <div className="w-full h-1.5 bg-[#242632] rounded-full overflow-hidden">
@@ -151,7 +177,7 @@ export const LibraryModal: React.FC<LibraryModalProps> = ({
                     }}
                     className="inline-flex items-center gap-1 text-cyan-300 underline font-semibold"
                   >
-                    <Settings className="w-3 h-3" /> Mở Cài đặt OMR
+                    <Settings className="w-3 h-3" /> {t(language, 'openOmrSettings')}
                   </button>
                 )}
               </div>
@@ -186,7 +212,9 @@ export const LibraryModal: React.FC<LibraryModalProps> = ({
                       <FileText className="w-2.5 h-2.5" />
                       {s.sourceFormat}
                     </span>
-                    <span>{s.measures.length} ô nhịp</span>
+                    <span>
+                      {s.measures.length} {t(language, 'measuresUnit')}
+                    </span>
                     <span>{s.defaultBpm} BPM</span>
                   </div>
                 </button>
@@ -194,7 +222,7 @@ export const LibraryModal: React.FC<LibraryModalProps> = ({
                   <button
                     type="button"
                     onClick={() => void onDeleteSong(s.id)}
-                    aria-label={`Xóa ${s.title}`}
+                    aria-label={`${t(language, 'deleteSong')} ${s.title}`}
                     className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-rose-950/50 text-slate-400 hover:text-rose-400"
                   >
                     <Trash2 className="w-4 h-4" />

@@ -4,6 +4,12 @@ export type NoteLabelMode = 'letters' | 'solfege' | 'off';
 
 export type SourceFormat = 'musicxml' | 'midi' | 'pdf';
 
+export type Language = 'en' | 'vi';
+
+export type SoundPreset = 'grand' | 'studio' | 'bright' | 'electric';
+
+export type PracticeMode = 'listen' | 'wait';
+
 export interface NoteEvent {
   id: string;
   midi: number;
@@ -48,6 +54,8 @@ export interface HandControlState {
 }
 
 export interface AppSettings {
+  language: Language;
+  soundPreset: SoundPreset;
   omrServerUrl: string;
   noteLabelMode: NoteLabelMode;
   showKeyLabels: boolean;

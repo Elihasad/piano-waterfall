@@ -30,6 +30,7 @@ export interface WaterfallFrameParams {
   loopEndMeasure: number;
   particles: Particle[];
   manualPressedMidis: Set<number>;
+  waitingMidis: Set<number>;
   isPlaying: boolean;
 }
 
@@ -77,6 +78,7 @@ export function renderWaterfallFrame(
     loopEndMeasure,
     particles,
     manualPressedMidis,
+    waitingMidis,
     isPlaying,
   } = params;
 
@@ -142,6 +144,17 @@ export function renderWaterfallFrame(
   const windowStart = currentTimeSec - 0.05;
   const windowEnd = currentTimeSec + lookAheadSec + 0.2;
 
+  // Draw white-key bars first, then black-key bars on top so black-key labels never get obscured
+  const visibleNotes: Array<{
+    note: Song['notes'][number];
+    pitchedMidi: number;
+    keyRect: NonNullable<ReturnType<KeyboardLayout['byMidi']['get']>>;
+    barTop: number;
+    barBottom: number;
+    barHeight: number;
+    isHit: boolean;
+  }> = [];
+
   for (const note of song.notes) {
     if (note.startTimeSec > windowEnd) break;
     const noteEnd = note.startTimeSec + note.durationSec;
@@ -179,46 +192,67 @@ export function renderWaterfallFrame(
     }
 
     if (barHeight <= 1) continue;
+    visibleNotes.push({ note, pitchedMidi, keyRect, barTop, barBottom, barHeight, isHit });
+  }
 
-    const padX = keyRect.isBlack ? 1 : 2;
+  visibleNotes.sort((a, b) => Number(a.keyRect.isBlack) - Number(b.keyRect.isBlack));
+
+  for (const item of visibleNotes) {
+    const { note, pitchedMidi, keyRect, barTop, barBottom, barHeight, isHit } = item;
+    const padX = keyRect.isBlack ? 0.5 : 1.5;
     const barX = keyRect.x + padX;
-    const barW = Math.max(4, keyRect.width - padX * 2);
+    const barW = Math.max(6, keyRect.width - padX * 2);
+
+    const isWaiting = waitingMidis.has(pitchedMidi) && Math.abs(note.startTimeSec - currentTimeSec) < 0.08;
 
     const fill =
       note.hand === 'left'
         ? keyRect.isBlack
-          ? '#16a34a'
+          ? '#15803d'
           : '#4ade80'
         : keyRect.isBlack
-          ? '#0891b2'
+          ? '#0369a1'
           : '#22d3ee';
 
     ctx.save();
-    if (effectsEnabled && isHit) {
-      ctx.shadowColor = note.hand === 'left' ? '#4ade80' : '#22d3ee';
-      ctx.shadowBlur = 14;
+    if (effectsEnabled && (isHit || isWaiting)) {
+      ctx.shadowColor = isWaiting ? '#fbbf24' : note.hand === 'left' ? '#4ade80' : '#22d3ee';
+      ctx.shadowBlur = isWaiting ? 18 : 14;
     }
     ctx.fillStyle = fill;
     drawRoundedRect(ctx, barX, barTop, barW, barHeight, 5);
     ctx.fill();
 
-    // Subtle top highlight edge
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = isWaiting ? '#fbbf24' : 'rgba(255, 255, 255, 0.35)';
+    ctx.lineWidth = isWaiting ? 2 : 1;
     ctx.stroke();
     ctx.restore();
 
-    // Note Name label on each falling bar
-    if (noteLabelMode !== 'off' && barHeight >= 15 && barW >= 12) {
+    // Always render crisp note name on EVERY falling bar (including black keys & short notes!)
+    if (noteLabelMode !== 'off' && barHeight >= 4) {
       const label = midiToNoteLabel(pitchedMidi, noteLabelMode, false);
-      const fontSize = Math.max(10, Math.min(14, Math.floor(barW * 0.52)));
+      const isSharp = label.length >= 2;
+      const fontSize = keyRect.isBlack
+        ? Math.max(8, Math.min(11, Math.floor(barW * (isSharp ? 0.58 : 0.72))))
+        : Math.max(9, Math.min(13, Math.floor(barW * 0.56)));
       ctx.font = `700 ${fontSize}px system-ui, -apple-system, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      const labelY = barHeight > 28 ? barBottom - 12 : barTop + barHeight / 2;
 
-      ctx.fillStyle = keyRect.isBlack ? '#ffffff' : '#082026';
-      ctx.fillText(label, barX + barW / 2, labelY, barW - 2);
+      const centerX = barX + barW / 2;
+      const labelY = barHeight > 24 ? barBottom - 10 : barTop + barHeight / 2;
+
+      if (keyRect.isBlack) {
+        // High-contrast dark outline + bright white text so sharps like C#, F# pop cleanly even on narrow bars
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = 'rgba(9, 9, 13, 0.85)';
+        ctx.strokeText(label, centerX, labelY);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(label, centerX, labelY);
+      } else {
+        ctx.fillStyle = '#062026';
+        ctx.fillText(label, centerX, labelY, Math.max(barW - 1, 14));
+      }
     }
   }
 
@@ -228,12 +262,27 @@ export function renderWaterfallFrame(
       const keyRect = layout.byMidi.get(midi);
       if (!keyRect) continue;
       const cx = keyRect.x + keyRect.width / 2;
-      const grad = ctx.createRadialGradient(cx, waterfallHeight, 1, cx, waterfallHeight, keyRect.width * 1.1);
+      const grad = ctx.createRadialGradient(
+        cx,
+        waterfallHeight,
+        1,
+        cx,
+        waterfallHeight,
+        keyRect.width * 1.1,
+      );
       grad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
-      grad.addColorStop(0.4, hand === 'left' ? 'rgba(74, 222, 128, 0.65)' : 'rgba(34, 211, 238, 0.65)');
+      grad.addColorStop(
+        0.4,
+        hand === 'left' ? 'rgba(74, 222, 128, 0.65)' : 'rgba(34, 211, 238, 0.65)',
+      );
       grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
       ctx.fillStyle = grad;
-      ctx.fillRect(cx - keyRect.width * 1.2, waterfallHeight - keyRect.width * 1.2, keyRect.width * 2.4, keyRect.width * 1.2);
+      ctx.fillRect(
+        cx - keyRect.width * 1.2,
+        waterfallHeight - keyRect.width * 1.2,
+        keyRect.width * 2.4,
+        keyRect.width * 1.2,
+      );
     }
 
     for (let i = particles.length - 1; i >= 0; i--) {
@@ -266,13 +315,16 @@ export function renderWaterfallFrame(
     if (key.isBlack) continue;
     const activeHand = activeKeyHands.get(key.midi);
     const manual = manualPressedMidis.has(key.midi);
+    const waiting = waitingMidis.has(key.midi);
 
-    if (activeHand === 'left') {
+    if (manual) {
+      ctx.fillStyle = '#a78bfa';
+    } else if (waiting) {
+      ctx.fillStyle = '#fde047';
+    } else if (activeHand === 'left') {
       ctx.fillStyle = '#4ade80';
     } else if (activeHand === 'right') {
       ctx.fillStyle = '#22d3ee';
-    } else if (manual) {
-      ctx.fillStyle = '#a78bfa';
     } else {
       ctx.fillStyle = '#f8fafc';
     }
@@ -282,15 +334,15 @@ export function renderWaterfallFrame(
     ctx.lineWidth = 1;
     ctx.strokeRect(key.x + 0.5, 0, key.width - 1, key.height - 2);
 
-    if (showKeyLabels && key.width >= 16) {
+    if (showKeyLabels && key.width >= 12) {
       const isC = key.midi % 12 === 0;
       const text = midiToNoteLabel(key.midi, noteLabelMode === 'off' ? 'letters' : noteLabelMode, isC);
-      const fontSize = Math.max(9, Math.min(12, Math.floor(key.width * 0.42)));
+      const fontSize = Math.max(8, Math.min(12, Math.floor(key.width * 0.42)));
       ctx.font = `${isC ? '700' : '500'} ${fontSize}px system-ui, -apple-system, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
-      ctx.fillStyle = activeHand || manual ? '#0f172a' : isC ? '#0f172a' : '#64748b';
-      ctx.fillText(text, key.x + key.width / 2, key.height - 6, key.width - 2);
+      ctx.fillStyle = activeHand || manual || waiting ? '#0f172a' : isC ? '#0f172a' : '#64748b';
+      ctx.fillText(text, key.x + key.width / 2, key.height - 5, key.width - 1);
     }
   }
 
@@ -298,13 +350,16 @@ export function renderWaterfallFrame(
     if (!key.isBlack) continue;
     const activeHand = activeKeyHands.get(key.midi);
     const manual = manualPressedMidis.has(key.midi);
+    const waiting = waitingMidis.has(key.midi);
 
-    if (activeHand === 'left') {
+    if (manual) {
+      ctx.fillStyle = '#7c3aed';
+    } else if (waiting) {
+      ctx.fillStyle = '#eab308';
+    } else if (activeHand === 'left') {
       ctx.fillStyle = '#16a34a';
     } else if (activeHand === 'right') {
       ctx.fillStyle = '#0891b2';
-    } else if (manual) {
-      ctx.fillStyle = '#7c3aed';
     } else {
       ctx.fillStyle = '#18181f';
     }
@@ -314,6 +369,17 @@ export function renderWaterfallFrame(
     ctx.strokeStyle = '#09090d';
     ctx.lineWidth = 1;
     ctx.stroke();
+
+    // Draw crisp note labels on BLACK keys too!
+    if (showKeyLabels && key.width >= 9) {
+      const text = midiToNoteLabel(key.midi, noteLabelMode === 'off' ? 'letters' : noteLabelMode, false);
+      const fontSize = Math.max(7, Math.min(10, Math.floor(key.width * 0.55)));
+      ctx.font = `700 ${fontSize}px system-ui, -apple-system, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillStyle = waiting ? '#0f172a' : '#e2e8f0';
+      ctx.fillText(text, key.x + key.width / 2, key.height - 4, key.width + 2);
+    }
   }
 
   ctx.restore();
