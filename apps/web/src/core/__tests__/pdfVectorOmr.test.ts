@@ -178,4 +178,23 @@ describe('pdfVectorExtractor & vector-assisted SMuFL OMR', () => {
     expect(res.notes.find((n) => n.hand === 'right')?.midi).toBe(66); // Gb4!
     expect(res.notes.find((n) => n.hand === 'left')?.startTimeSec).toBeCloseTo(0, 2);
   });
+
+  it('tracks mid-line clef changes including gClef8va (U+E053 in Grand Escape) accurately', () => {
+    // E Major (4 sharps: F#, C#, G#, D#), starting with gClef (U+E050) then mid-line gClef8va (U+E053)
+    const items: SmuflTextItem[] = [
+      { str: '\uE050', x: 50, y: 700, fontSize: 24 },
+      { str: '\uE262', x: 66, y: 712, fontSize: 24 },
+      { str: '\uE262', x: 74, y: 703, fontSize: 24 },
+      { str: '\uE262', x: 82, y: 715, fontSize: 24 },
+      { str: '\uE262', x: 90, y: 706, fontSize: 24 },
+      // Mid-line gClef8va (+1 octave) before the first note
+      { str: '\uE053', x: 115, y: 700, fontSize: 20 },
+      // C6 position (+10 steps = +30px above G4=700) under gClef8va + C# key sig -> C#7 (MIDI 97)!
+      { str: '\uE0A4', x: 145, y: 730, fontSize: 24 },
+      // B5 position (+9 steps = +27px above G4=700) under gClef8va -> B6 (MIDI 95)!
+      { str: '\uE0A4', x: 175, y: 727, fontSize: 24 },
+    ];
+    const res = extractNotesFromSmuflItems(items, 1, 0, 74);
+    expect(res.notes.map((n) => n.midi)).toEqual([97, 95]);
+  });
 });

@@ -23,6 +23,15 @@ const FLAT_ORDER_DEGREES = [6, 2, 5, 1, 4, 0, 3]; // B E A D G C F
 const SHARP_ORDER_DEGREES = [3, 0, 4, 1, 5, 2, 6]; // F C G D A E B
 
 // SMuFL Unicode code points (Bravura / Leland / Petaluma — MuseScore, Dorico, Sibelius)
+const SMUFL_CLEF_ANCHOR: Record<string, { clef: 'treble' | 'bass'; anchorDiatonic: number }> = {
+  '\uE050': { clef: 'treble', anchorDiatonic: 32 }, // gClef (G4)
+  '\uE052': { clef: 'treble', anchorDiatonic: 25 }, // gClef8vb (G3, -1 oct)
+  '\uE053': { clef: 'treble', anchorDiatonic: 39 }, // gClef8va (G5, +1 oct)
+  '\uE054': { clef: 'treble', anchorDiatonic: 46 }, // gClef15ma (G6, +2 oct)
+  '\uE062': { clef: 'bass', anchorDiatonic: 24 },   // fClef (F3)
+  '\uE064': { clef: 'bass', anchorDiatonic: 17 },   // fClef8vb (F2, -1 oct)
+  '\uE065': { clef: 'bass', anchorDiatonic: 31 },   // fClef8va (F4, +1 oct)
+};
 const SMUFL_G_CLEF = '\uE050';
 const SMUFL_F_CLEF = '\uE062';
 const SMUFL_NOTE_BLACK = '\uE0A4';
@@ -123,11 +132,12 @@ export function extractNotesFromSmuflItems(
     anchorY: number; // G4 line for treble, F3 line for bass
     fontSize: number;
     stepPx: number; // 1 diatonic half-step = fontSize / 8
+    clefEvents: Array<{ x: number; anchorDiatonic: number }>; // supports mid-line clef & 8va/8vb clef changes!
     keyAccidentals: Map<number, number>; // degree (0..6) -> -1 | +1
   }
 
   const clefs = glyphs
-    .filter((g) => g.ch === SMUFL_G_CLEF || g.ch === SMUFL_F_CLEF)
+    .filter((g) => g.ch in SMUFL_CLEF_ANCHOR)
     .sort((a, b) => b.y - a.y); // Top of page (higher PDF Y) to bottom
 
   if (clefs.length === 0) {
@@ -140,16 +150,20 @@ export function extractNotesFromSmuflItems(
     };
   }
 
-  // Deduplicate clefs that are mid-line clef changes (keep leftmost clef per staff row)
-  const rowClefs: typeof clefs = [];
+  // Group clefs by staff row while preserving ALL mid-line clef changes sorted by X!
+  const staffRows: Array<{
+    primary: (typeof clefs)[number];
+    allClefs: Array<(typeof clefs)[number]>;
+  }> = [];
   for (const c of clefs) {
-    const sameRow = rowClefs.find((rc) => Math.abs(rc.y - c.y) < c.fontSize * 0.7);
+    const sameRow = staffRows.find((r) => Math.abs(r.primary.y - c.y) < Math.max(r.primary.fontSize, c.fontSize) * 0.7);
     if (!sameRow) {
-      rowClefs.push(c);
-    } else if (c.x < sameRow.x) {
-      sameRow.x = c.x;
-      sameRow.ch = c.ch;
-      sameRow.y = c.y;
+      staffRows.push({ primary: c, allClefs: [c] });
+    } else {
+      sameRow.allClefs.push(c);
+      if (c.x < sameRow.primary.x) {
+        sameRow.primary = c;
+      }
     }
   }
 
@@ -179,10 +193,19 @@ export function extractNotesFromSmuflItems(
     };
   }
 
-  const staves: SmuflStaff[] = rowClefs.map((c) => {
-    const clef: 'treble' | 'bass' = c.ch === SMUFL_F_CLEF ? 'bass' : 'treble';
+  const staves: SmuflStaff[] = staffRows.map((row) => {
+    const c = row.primary;
+    const clefMeta = SMUFL_CLEF_ANCHOR[c.ch] ?? { clef: 'treble', anchorDiatonic: 32 };
+    const clef: 'treble' | 'bass' = clefMeta.clef;
     const fontSize = c.fontSize > 4 ? c.fontSize : 20;
     const stepPx = fontSize / 8;
+
+    const clefEvents = [...row.allClefs]
+      .sort((a, b) => a.x - b.x)
+      .map((cg) => ({
+        x: cg.x,
+        anchorDiatonic: SMUFL_CLEF_ANCHOR[cg.ch]?.anchorDiatonic ?? clefMeta.anchorDiatonic,
+      }));
 
     // Detect key signature accidentals immediately to the right of the clef (supports up to 7 flats/sharps!)
     const firstNoteOnStaff = noteGlyphs
@@ -221,6 +244,7 @@ export function extractNotesFromSmuflItems(
       anchorY: c.y,
       fontSize,
       stepPx,
+      clefEvents,
       keyAccidentals,
     };
   });
@@ -336,7 +360,15 @@ export function extractNotesFromSmuflItems(
     if (ng.x < st.x + st.fontSize * 0.5) continue;
 
     const stepsFromAnchor = Math.round((ng.y - st.anchorY) / st.stepPx);
-    const anchorDiatonic = st.clef === 'treble' ? 32 : 24;
+    // Use the active clef at this notehead's X position (supports mid-line clef & 8va/8vb clef changes!)
+    let anchorDiatonic = st.clefEvents[0]?.anchorDiatonic ?? (st.clef === 'treble' ? 32 : 24);
+    for (const ce of st.clefEvents) {
+      if (ce.x < ng.x) {
+        anchorDiatonic = ce.anchorDiatonic;
+      } else {
+        break;
+      }
+    }
     const diatonic = anchorDiatonic + stepsFromAnchor;
     const degree = ((diatonic % 7) + 7) % 7;
 
