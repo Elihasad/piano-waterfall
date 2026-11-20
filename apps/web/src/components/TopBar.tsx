@@ -20,6 +20,7 @@ import {
   Plus,
   Piano,
   Usb,
+  BookOpen,
 } from 'lucide-react';
 import { t } from '../core/i18n';
 import { midiToNoteLabel } from '../core/noteNames';
@@ -65,6 +66,7 @@ interface TopBarProps {
   onToggleEffects: () => void;
   onToggleFullKeyboard: () => void;
   onOpenAccompaniment?: () => void;
+  onOpenTheory?: () => void;
   onOpenLibrary: () => void;
   onOpenSettings: () => void;
 }
@@ -109,6 +111,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onToggleEffects,
   onToggleFullKeyboard,
   onOpenAccompaniment,
+  onOpenTheory,
   onOpenLibrary,
   onOpenSettings,
 }) => {
@@ -265,6 +268,19 @@ export const TopBar: React.FC<TopBarProps> = ({
           >
             <Sparkles className="w-3.5 h-3.5" />
             <span>{language === 'vi' ? 'Đệm Hát' : 'Chords'}</span>
+          </button>
+        )}
+
+        {/* Pure Theory Guide Tab */}
+        {onOpenTheory && (
+          <button
+            type="button"
+            onClick={onOpenTheory}
+            aria-label={language === 'vi' ? 'Hướng dẫn Lý thuyết Đệm Hát' : 'Piano Accompaniment Theory Guide'}
+            className="flex items-center gap-1 px-2.5 h-9 rounded-lg text-xs font-bold shrink-0 bg-cyan-950/60 border border-cyan-500/40 text-cyan-200 hover:bg-cyan-900/50 transition"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span>{language === 'vi' ? 'Lý thuyết' : 'Theory'}</span>
           </button>
         )}
 

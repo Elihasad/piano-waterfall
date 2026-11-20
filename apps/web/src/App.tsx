@@ -50,6 +50,7 @@ export default function App() {
   const [fullKeyboard, setFullKeyboard] = useState(false);
   const [showLibrary, setShowLibrary] = useState(false);
   const [showAccompaniment, setShowAccompaniment] = useState(false);
+  const [accompanimentTab, setAccompanimentTab] = useState<'practice' | 'theory'>('practice');
   const [showSettings, setShowSettings] = useState(false);
   const [isPortraitMobile, setIsPortraitMobile] = useState(false);
   const [midiState, setMidiState] = useState<MidiDeviceState>({
@@ -331,7 +332,14 @@ export default function App() {
         onCycleNoteLabelMode={handleCycleNoteLabelMode}
         onToggleEffects={() => handleUpdateSettings({ effectsEnabled: !settings.effectsEnabled })}
         onToggleFullKeyboard={() => setFullKeyboard((v) => !v)}
-        onOpenAccompaniment={() => setShowAccompaniment(true)}
+        onOpenAccompaniment={() => {
+          setAccompanimentTab('practice');
+          setShowAccompaniment(true);
+        }}
+        onOpenTheory={() => {
+          setAccompanimentTab('theory');
+          setShowAccompaniment(true);
+        }}
         onOpenLibrary={() => setShowLibrary(true)}
         onOpenSettings={() => setShowSettings(true)}
       />
@@ -381,6 +389,7 @@ export default function App() {
           originalSong={originalSong}
           isAccompanimentActive={Boolean(accompanimentSong)}
           activeStyleId={activeStyleId}
+          initialTab={accompanimentTab}
           onApplyAccompaniment={handleApplyAccompaniment}
           onReturnOriginal={handleReturnOriginal}
           onClose={() => setShowAccompaniment(false)}

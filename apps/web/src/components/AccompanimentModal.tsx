@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Music2, Play, RotateCcw, Sparkles, X } from 'lucide-react';
+import { BookOpen, Music2, Play, RotateCcw, Sparkles, X } from 'lucide-react';
 import {
   ACCOMPANIMENT_STYLES,
   buildPresetAccompanimentSong,
@@ -15,12 +15,14 @@ import {
   PC_NAMES_SHARP,
 } from '../core/accompaniment/harmonyAnalyzer';
 import type { AccompanimentStyleId, Language, Song } from '../core/types';
+import { TheoryGuideTab } from './TheoryGuideTab';
 
 interface AccompanimentModalProps {
   language: Language;
   originalSong: Song;
   isAccompanimentActive: boolean;
   activeStyleId: AccompanimentStyleId;
+  initialTab?: 'practice' | 'theory';
   onApplyAccompaniment: (song: Song, styleId: AccompanimentStyleId) => void;
   onReturnOriginal: () => void;
   onClose: () => void;
@@ -38,12 +40,14 @@ export const AccompanimentModal: React.FC<AccompanimentModalProps> = ({
   originalSong,
   isAccompanimentActive,
   activeStyleId,
+  initialTab = 'practice',
   onApplyAccompaniment,
   onReturnOriginal,
   onClose,
 }) => {
   const harmony = useMemo(() => analyzeSongHarmony(originalSong), [originalSong]);
 
+  const [mainTab, setMainTab] = useState<'practice' | 'theory'>(initialTab);
   const [sourceMode, setSourceMode] = useState<'song' | 'preset' | 'custom'>('song');
   const [selectedGenre, setSelectedGenre] = useState<StyleGenre>(() => {
     const found = ACCOMPANIMENT_STYLES.find((s) => s.id === activeStyleId);
@@ -158,8 +162,44 @@ export const AccompanimentModal: React.FC<AccompanimentModalProps> = ({
           </button>
         </div>
 
+        {/* Main Mode Tabs: Practice vs Theory Guide */}
+        <div className="flex border-b border-[#2c2e3b] bg-[#151620] px-4 pt-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setMainTab('practice')}
+            className={`px-3 py-2 text-xs font-bold border-b-2 inline-flex items-center gap-1.5 transition ${
+              mainTab === 'practice'
+                ? 'border-violet-500 text-white'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+            {isVi ? 'Thực hành Đệm Hát' : 'Practice & Styles'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setMainTab('theory')}
+            className={`px-3 py-2 text-xs font-bold border-b-2 inline-flex items-center gap-1.5 transition ${
+              mainTab === 'theory'
+                ? 'border-cyan-400 text-white'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <BookOpen className="w-3.5 h-3.5 text-cyan-400" />
+            {isVi ? 'Hướng dẫn Lý thuyết' : 'Theory Guide'}
+          </button>
+        </div>
+
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+          {mainTab === 'theory' ? (
+            <TheoryGuideTab
+              language={language}
+              initialTonicPc={harmony.key.tonicPc}
+              initialMode={harmony.key.mode}
+            />
+          ) : (
+            <>
           {/* Detected Key & Scale Banner */}
           <div className="rounded-xl bg-[#14151c] border border-[#262836] p-3 space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -385,6 +425,8 @@ export const AccompanimentModal: React.FC<AccompanimentModalProps> = ({
               ))}
             </div>
           </div>
+            </>
+          )}
         </div>
 
         {/* Footer */}
@@ -412,14 +454,25 @@ export const AccompanimentModal: React.FC<AccompanimentModalProps> = ({
             >
               {isVi ? 'Đóng' : 'Close'}
             </button>
-            <button
-              type="button"
-              onClick={handleApply}
-              className="px-4 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-xs font-bold text-white inline-flex items-center gap-1.5"
-            >
-              <Play className="w-3.5 h-3.5" />
-              {isVi ? 'Chạy Đệm Hát Ngay' : 'Start Accompaniment'}
-            </button>
+            {mainTab === 'theory' ? (
+              <button
+                type="button"
+                onClick={() => setMainTab('practice')}
+                className="px-4 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-xs font-bold text-white inline-flex items-center gap-1.5"
+              >
+                <Play className="w-3.5 h-3.5" />
+                {isVi ? 'Sang Thực hành Ngay' : 'Try in Practice'}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleApply}
+                className="px-4 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-xs font-bold text-white inline-flex items-center gap-1.5"
+              >
+                <Play className="w-3.5 h-3.5" />
+                {isVi ? 'Chạy Đệm Hát Ngay' : 'Start Accompaniment'}
+              </button>
+            )}
           </div>
         </div>
       </div>
