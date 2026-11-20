@@ -34,9 +34,9 @@ const SMUFL_CLEF_ANCHOR: Record<string, { clef: 'treble' | 'bass'; anchorDiatoni
 };
 const SMUFL_G_CLEF = '\uE050';
 const SMUFL_F_CLEF = '\uE062';
-const SMUFL_NOTE_BLACK = '\uE0A4';
-const SMUFL_NOTE_HALF = '\uE0A3';
-const SMUFL_NOTE_WHOLE = '\uE0A2';
+const SMUFL_NOTES_BLACK = new Set(['\uE0A4', '\uF4BE', '\uF468']);
+const SMUFL_NOTES_HALF = new Set(['\uE0A3', '\uF4BD', '\uF467']);
+const SMUFL_NOTES_WHOLE = new Set(['\uE0A2', '\uF4BC', '\uF466']);
 const SMUFL_FLAT = '\uE260';
 const SMUFL_NATURAL = '\uE261';
 const SMUFL_SHARP = '\uE262';
@@ -180,7 +180,7 @@ export function extractNotesFromSmuflItems(
     (g) => g.ch in SMUFL_TIME_DIGITS || g.ch === SMUFL_TIME_COMMON || g.ch === SMUFL_TIME_CUT,
   );
   const noteGlyphs = glyphs.filter(
-    (g) => g.ch === SMUFL_NOTE_BLACK || g.ch === SMUFL_NOTE_HALF || g.ch === SMUFL_NOTE_WHOLE,
+    (g) => SMUFL_NOTES_BLACK.has(g.ch) || SMUFL_NOTES_HALF.has(g.ch) || SMUFL_NOTES_WHOLE.has(g.ch),
   );
 
   if (noteGlyphs.length === 0) {
@@ -393,8 +393,11 @@ export function extractNotesFromSmuflItems(
     );
 
     const midi = diatonicWithAccidentalToMidi(diatonic, accOffset);
-    const kind: SmuflParsedNote['kind'] =
-      ng.ch === SMUFL_NOTE_WHOLE ? 'whole' : ng.ch === SMUFL_NOTE_HALF ? 'half' : 'black';
+    const kind: SmuflParsedNote['kind'] = SMUFL_NOTES_WHOLE.has(ng.ch)
+      ? 'whole'
+      : SMUFL_NOTES_HALF.has(ng.ch)
+        ? 'half'
+        : 'black';
 
     // Determine exact rhythmic duration from notehead + SMuFL flag + PDF vector beam count + dot
     let baseBeats = 1.0;
