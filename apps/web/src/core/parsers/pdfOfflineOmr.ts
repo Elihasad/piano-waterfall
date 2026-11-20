@@ -82,7 +82,18 @@ export function extractNotesFromSmuflItems(
     if (m) {
       const val = Number.parseInt(m[1], 10);
       if (val >= 30 && val <= 260) {
-        detectedBpm = val;
+        // Dotted-quarter tempo (e.g. 12/8 or 6/8 "♩. = 64" -> 96 quarter-note BPM),
+        // checking both same text item and an adjacent SMuFL dot glyph just left of "= 64"
+        const hasInlineDot = item.str.includes(SMUFL_AUG_DOT) || item.str.includes('.');
+        const hasNearbyDot = items.some(
+          (other) =>
+            other !== item &&
+            other.str.includes(SMUFL_AUG_DOT) &&
+            other.x <= item.x + item.fontSize &&
+            item.x - other.x < item.fontSize * 3.0 &&
+            Math.abs(other.y - item.y) < item.fontSize * 1.2,
+        );
+        detectedBpm = hasInlineDot || hasNearbyDot ? Math.round(val * 1.5) : val;
         break;
       }
     }
@@ -378,10 +389,10 @@ export function extractNotesFromSmuflItems(
             ng.x <= b.x2 + st.fontSize * 0.45 &&
             Math.abs(b.y - ng.y) <= st.fontSize * 2.6,
         );
-        // Deduplicate beam Y levels within 2.5px
+        // Deduplicate beam Y levels within 0.1 * fontSize (scale-invariant!)
         const distinctLevels: number[] = [];
         for (const b of matchingBeams) {
-          if (!distinctLevels.some((ly) => Math.abs(ly - b.y) < 2.5)) {
+          if (!distinctLevels.some((ly) => Math.abs(ly - b.y) < st.fontSize * 0.1)) {
             distinctLevels.push(b.y);
           }
         }
@@ -436,12 +447,15 @@ export function extractNotesFromSmuflItems(
     const rawBarXs: number[] = [];
     if (geometry && geometry.barlines.length > 0) {
       if (sys.length >= 2) {
-        // Grand-staff barlines MUST span continuously from Treble staff down to Bass staff
+        // Grand-staff barlines MUST span continuously between Treble and Bass staves
         const trebleY = sys[0].anchorY;
         const bassY = sys[1].anchorY;
+        const staffSpan = Math.max(fontSize, trebleY - bassY);
         for (const bl of geometry.barlines) {
           const spansBothStaves =
-            bl.yMax >= trebleY + fontSize * 0.2 && bl.yMin <= bassY - fontSize * 0.2;
+            bl.yMax >= trebleY &&
+            bl.yMin <= bassY + fontSize * 0.55 &&
+            bl.yMax - bl.yMin >= staffSpan * 0.85;
           if (spansBothStaves && bl.x > firstContentX + fontSize * 1.2) {
             rawBarXs.push(bl.x);
           }
@@ -661,27 +675,27 @@ export function extractNotesFromSmuflItems(
     }
   });
 
-  // Merge tied notes using short PDF vector tie arcs (strictly adjacent same-pitch notes only, avoiding slurs!)
+  // Merge tied notes using short PDF vector tie arcs (scale-invariant with pageFontSize!)
+  const pageFontSize = staves[0]?.fontSize || 24;
   const removedIndices = new Set<number>();
   if (geometry && geometry.ties.length > 0 && emittedNotes.length > 1) {
     for (const tie of geometry.ties) {
       const tieSpan = tie.x2 - tie.x1;
-      if (tieSpan > 80) continue; // Long arcs are phrase slurs, not ties
+      if (tieSpan > pageFontSize * 3.5) continue; // Long arcs are phrase slurs, not ties
       let startIdx = -1;
       let endIdx = -1;
       for (let i = 0; i < emittedNotes.length; i++) {
         if (removedIndices.has(i)) continue;
         const n = emittedNotes[i];
-        const refSize = 24;
-        if (Math.abs(n.pdfY - tie.y) > refSize * 0.45) continue;
-        if (startIdx < 0 && Math.abs(n.pdfX - tie.x1) <= refSize * 0.45) {
+        if (Math.abs(n.pdfY - tie.y) > pageFontSize * 0.55) continue;
+        if (startIdx < 0 && Math.abs(n.pdfX - tie.x1) <= pageFontSize * 0.55) {
           startIdx = i;
         } else if (
           startIdx >= 0 &&
           n.midi === emittedNotes[startIdx].midi &&
           n.hand === emittedNotes[startIdx].hand &&
           n.sysIdx === emittedNotes[startIdx].sysIdx &&
-          Math.abs(n.pdfX - tie.x2) <= refSize * 0.45
+          Math.abs(n.pdfX - tie.x2) <= pageFontSize * 0.55
         ) {
           endIdx = i;
           break;
@@ -1086,16 +1100,18 @@ export async function parsePdfOffline(
         page.getTextContent(),
         page.getOperatorList(),
       ]);
-      const geometry = extractVectorGeometryFromOps(
-        opList.fnArray,
-        opList.argsArray,
-        pdfjsLib.OPS as unknown as Record<string, number>,
-      );
       const smuflItems: SmuflTextItem[] = [];
+      let detectedClefFontSize = 24;
       for (const raw of textContent.items) {
         if (!('str' in raw) || !raw.str) continue;
         const tr = raw.transform as number[];
         const fontSize = Math.hypot(tr[0], tr[1]) || Math.abs(tr[3]) || 20;
+        if (
+          detectedClefFontSize === 24 &&
+          (raw.str.includes(SMUFL_G_CLEF) || raw.str.includes(SMUFL_F_CLEF))
+        ) {
+          detectedClefFontSize = fontSize;
+        }
         smuflItems.push({
           str: raw.str,
           x: tr[4],
@@ -1103,6 +1119,12 @@ export async function parsePdfOffline(
           fontSize,
         });
       }
+      const geometry = extractVectorGeometryFromOps(
+        opList.fnArray,
+        opList.argsArray,
+        pdfjsLib.OPS as unknown as Record<string, number>,
+        detectedClefFontSize,
+      );
       const smuflRes = extractNotesFromSmuflItems(
         smuflItems,
         nextMeasure,
@@ -1130,8 +1152,10 @@ export async function parsePdfOffline(
 
     if (pageExtracted) continue;
 
-    // 2. Fallback: Canvas grayscale raster OMR for scanned / non-SMuFL PDFs
-    const viewport = page.getViewport({ scale: 2.2 });
+    // 2. Fallback: Canvas grayscale raster OMR for scanned / non-SMuFL PDFs (capped to 1400px wide to avoid OOM)
+    const baseVp = page.getViewport({ scale: 1 });
+    const safeScale = Math.min(2.2, 1400 / Math.max(1, baseVp.width));
+    const viewport = page.getViewport({ scale: safeScale });
     const canvas = document.createElement('canvas');
     canvas.width = Math.floor(viewport.width);
     canvas.height = Math.floor(viewport.height);

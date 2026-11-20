@@ -39,18 +39,33 @@ function applyMatrix(m: Matrix6, x: number, y: number): [number, number] {
   return [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
 }
 
+function isNumericSequence(val: unknown): val is ArrayLike<number> {
+  return Array.isArray(val) || ArrayBuffer.isView(val);
+}
+
 /**
- * Interprets a pdf.js page operator list (with full 2D CTM stack) to extract
- * musical vector primitives in PDF page coordinates:
- * - Barlines (vertical segments / thin vertical rects)
- * - Beams (horizontal or sloped parallelograms / thick rects)
- * - Ties (shallow Bezier arcs connecting same-pitch notes)
+ * Scale-invariant interpreter for a pdf.js page operator list (with full 2D CTM stack).
+ * All thresholds scale proportionally with `refFontSize` (e.g., ~24pt standard PDFs or
+ * ~330.7 units in MuseScore's 1/20pt coordinate space).
  */
 export function extractVectorGeometryFromOps(
   fnArray: number[],
   argsArray: unknown[],
   ops: Record<string, number>,
+  refFontSize = 24,
 ): VectorGeometry {
+  const fs = Math.max(8, refFontSize);
+  const barMaxW = Math.max(3.5, fs * 0.14);
+  const barMinH = fs * 0.65;
+  const beamMinW = fs * 0.24;
+  const beamMinH = Math.max(1.2, fs * 0.05);
+  const beamMaxH = fs * 0.85;
+  const tieMinW = fs * 0.25;
+  const tieMaxW = fs * 4.5;
+  const tieMaxDy = fs * 0.45;
+  const tieMinCtrl = Math.max(1.0, fs * 0.03);
+  const tieMaxCtrl = fs * 1.1;
+
   const barlines: VectorBarline[] = [];
   const beams: VectorBeam[] = [];
   const ties: VectorTie[] = [];
@@ -78,20 +93,16 @@ export function extractVectorGeometryFromOps(
       const h = yMax - yMin;
 
       // Vertical barline polygon
-      if (w <= 3.5 && h >= 16) {
+      if (w <= barMaxW && h >= barMinH) {
         barlines.push({ x: (xMin + xMax) / 2, yMin, yMax });
       }
       // Horizontal or sloped beam parallelogram (MuseScore draws beams as 4-pt polygons)
-      else if (w >= 6 && h >= 1.5 && h <= 24 && h / w < 0.6) {
+      else if (w >= beamMinW && h >= beamMinH && h <= beamMaxH && h / w < 0.72) {
         beams.push({ x1: xMin, x2: xMax, y: (yMin + yMax) / 2 });
       }
     }
     polyPts = [];
   };
-
-function isNumericSequence(val: unknown): val is ArrayLike<number> {
-  return Array.isArray(val) || ArrayBuffer.isView(val);
-}
 
   const processPathOp = (op: number, coords: ArrayLike<number>, coordIdx: { i: number }) => {
     if (op === ops.closePath) {
@@ -107,7 +118,7 @@ function isNumericSequence(val: unknown): val is ArrayLike<number> {
       const dx = Math.abs(x - curX);
       const dy = Math.abs(y - curY);
       // Direct stroked vertical barline segment
-      if (dx <= 2.5 && dy >= 16) {
+      if (dx <= barMaxW && dy >= barMinH) {
         barlines.push({ x: (curX + x) / 2, yMin: Math.min(curY, y), yMax: Math.max(curY, y) });
       }
       polyPts.push([x, y]);
@@ -121,7 +132,13 @@ function isNumericSequence(val: unknown): val is ArrayLike<number> {
       const dy = Math.abs(y3 - curY);
       const ctrlOffset = Math.max(Math.abs(cy1 - curY), Math.abs(cy2 - y3));
       // Tie / slur arc: spans horizontally between notes, ends at similar height, shallow vertical arch
-      if (dx >= 8 && dx <= 180 && dy <= 10 && ctrlOffset >= 1.2 && ctrlOffset <= 24) {
+      if (
+        dx >= tieMinW &&
+        dx <= tieMaxW &&
+        dy <= tieMaxDy &&
+        ctrlOffset >= tieMinCtrl &&
+        ctrlOffset <= tieMaxCtrl
+      ) {
         ties.push({
           x1: Math.min(curX, x3),
           x2: Math.max(curX, x3),
@@ -152,9 +169,9 @@ function isNumericSequence(val: unknown): val is ArrayLike<number> {
       const w = xMax - xMin;
       const h = yMax - yMin;
 
-      if (w <= 3.5 && h >= 16) {
+      if (w <= barMaxW && h >= barMinH) {
         barlines.push({ x: (xMin + xMax) / 2, yMin, yMax });
-      } else if (w >= 6 && h >= 1.5 && h <= 16 && h / w < 0.55) {
+      } else if (w >= beamMinW && h >= beamMinH && h <= beamMaxH && h / w < 0.72) {
         beams.push({ x1: xMin, x2: xMax, y: (yMin + yMax) / 2 });
       }
     }
