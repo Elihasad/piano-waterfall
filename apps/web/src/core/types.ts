@@ -33,6 +33,49 @@ export interface TempoEvent {
   bpm: number;
 }
 
+export type ChordQuality =
+  | 'maj'
+  | 'min'
+  | 'dim'
+  | 'aug'
+  | 'sus2'
+  | 'sus4'
+  | 'maj7'
+  | 'm7'
+  | '7'
+  | 'm7b5';
+
+export interface ChordEvent {
+  measureNumber: number;
+  startTimeSec: number;
+  endTimeSec: number;
+  rootPc: number; // 0=C .. 11=B
+  bassPc: number; // equals rootPc unless slash chord
+  quality: ChordQuality;
+  symbol: string; // e.g. "C", "Am7", "G/B"
+  pitchClasses: number[]; // chord tones in 0..11
+}
+
+export interface DetectedKey {
+  tonicPc: number; // 0..11
+  mode: 'major' | 'minor';
+  label: string; // e.g. "C Major", "A Minor"
+  scalePcs: number[]; // 7 pitch classes
+  diatonicChords: Array<{ roman: string; symbol: string; rootPc: number; quality: ChordQuality }>;
+}
+
+export type AccompanimentStyleId =
+  | 'ballad-basic'
+  | 'ballad-arpeggio'
+  | 'pop-groove'
+  | 'slow-rock-68'
+  | 'bolero'
+  | 'bossa-nova'
+  | 'jazz-swing'
+  | 'jazz-ballad'
+  | 'jazz-lofi'
+  | 'scale-drill';
+
 export interface Song {
   id: string;
   title: string;
@@ -46,6 +89,8 @@ export interface Song {
   notes: NoteEvent[];
   minMidi: number;
   maxMidi: number;
+  chords?: ChordEvent[];
+  detectedKey?: DetectedKey;
 }
 
 export interface HandControlState {

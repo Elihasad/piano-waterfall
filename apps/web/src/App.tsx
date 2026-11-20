@@ -3,10 +3,14 @@ import { RotateCw } from 'lucide-react';
 import { MidiInputManager, type MidiDeviceState } from './audio/midiInput';
 import { PianoSynth } from './audio/pianoSynth';
 import { PlaybackClock, type PlaybackSnapshot } from './audio/playbackClock';
+import { AccompanimentModal } from './components/AccompanimentModal';
+import { ChordRibbon } from './components/ChordRibbon';
 import { LibraryModal } from './components/LibraryModal';
 import { PianoStage } from './components/PianoStage';
 import { SettingsModal } from './components/SettingsModal';
 import { TopBar } from './components/TopBar';
+import { ACCOMPANIMENT_STYLES } from './core/accompaniment/accompanimentGenerator';
+import { analyzeSongHarmony } from './core/accompaniment/harmonyAnalyzer';
 import { t } from './core/i18n';
 import {
   deleteSong,
@@ -16,6 +20,7 @@ import {
   seedDemoSongsIfEmpty,
 } from './core/storage';
 import type {
+  AccompanimentStyleId,
   AppSettings,
   HandControlState,
   NoteLabelMode,
@@ -32,32 +37,19 @@ export default function App() {
   const clock = useMemo(() => new PlaybackClock(player), [player]);
 
   const [songs, setSongs] = useState<Song[]>(DEMO_SONGS);
-  const [currentSong, setCurrentSong] = useState<Song>(DEMO_SONGS[0]);
-  const initialOmrParam = useMemo(() => {
-    if (typeof window === 'undefined') return '';
-    const omr = new URLSearchParams(window.location.search).get('omr')?.trim() ?? '';
-    return /^https?:\/\//i.test(omr) ? omr : '';
-  }, []);
+  const [originalSong, setOriginalSong] = useState<Song>(DEMO_SONGS[0]);
+  const [accompanimentSong, setAccompanimentSong] = useState<Song | null>(null);
+  const [activeStyleId, setActiveStyleId] = useState<AccompanimentStyleId>('ballad-basic');
+  const currentSong = accompanimentSong ?? originalSong;
 
   const [settings, setSettings] = useState<AppSettings>(() => {
-    let loaded = getSettings();
-    if (initialOmrParam) {
-      loaded = saveSettings({ omrServerUrl: initialOmrParam });
-    }
+    const loaded = getSettings();
     player.setPreset(loaded.soundPreset);
     return loaded;
   });
   const [fullKeyboard, setFullKeyboard] = useState(false);
-  const [showLibrary, setShowLibrary] = useState(() => Boolean(initialOmrParam));
-
-  useEffect(() => {
-    if (!initialOmrParam || typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    params.delete('omr');
-    const nextSearch = params.toString();
-    const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}${window.location.hash}`;
-    window.history.replaceState({}, '', nextUrl);
-  }, [initialOmrParam]);
+  const [showLibrary, setShowLibrary] = useState(false);
+  const [showAccompaniment, setShowAccompaniment] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [isPortraitMobile, setIsPortraitMobile] = useState(false);
   const [midiState, setMidiState] = useState<MidiDeviceState>({
@@ -77,7 +69,8 @@ export default function App() {
     void seedDemoSongsIfEmpty().then((loaded) => {
       if (!mounted || loaded.length === 0) return;
       setSongs(loaded);
-      setCurrentSong(loaded[0]);
+      setOriginalSong(loaded[0]);
+      setAccompanimentSong(null);
       clock.loadSong(loaded[0]);
       setSnapshot(clock.getSnapshot());
     });
@@ -124,11 +117,41 @@ export default function App() {
 
   const selectSong = useCallback(
     (song: Song) => {
-      setCurrentSong(song);
+      setOriginalSong(song);
+      setAccompanimentSong(null);
       clock.loadSong(song);
       setSnapshot(clock.getSnapshot());
     },
     [clock],
+  );
+
+  const handleApplyAccompaniment = useCallback(
+    (accSong: Song, styleId: AccompanimentStyleId) => {
+      setActiveStyleId(styleId);
+      setAccompanimentSong(accSong);
+      clock.loadSong(accSong);
+      clock.play();
+      setSnapshot(clock.getSnapshot());
+    },
+    [clock],
+  );
+
+  const handleReturnOriginal = useCallback(() => {
+    setAccompanimentSong(null);
+    clock.loadSong(originalSong);
+    setSnapshot(clock.getSnapshot());
+  }, [clock, originalSong]);
+
+  const liveHarmony = useMemo(() => {
+    if (currentSong.chords && currentSong.detectedKey) {
+      return { key: currentSong.detectedKey, chords: currentSong.chords };
+    }
+    return analyzeSongHarmony(currentSong);
+  }, [currentSong]);
+
+  const activeStyleMeta = useMemo(
+    () => ACCOMPANIMENT_STYLES.find((s) => s.id === activeStyleId),
+    [activeStyleId],
   );
 
   const handleImportSong = useCallback(async (song: Song) => {
@@ -241,7 +264,7 @@ export default function App() {
   // Desktop keyboard shortcuts
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (showLibrary || showSettings) return;
+      if (showLibrary || showSettings || showAccompaniment) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
@@ -266,6 +289,7 @@ export default function App() {
   }, [
     showLibrary,
     showSettings,
+    showAccompaniment,
     clock,
     handleTogglePlay,
     handleStepMeasure,
@@ -293,6 +317,7 @@ export default function App() {
         noteLabelMode={settings.noteLabelMode}
         effectsEnabled={settings.effectsEnabled}
         fullKeyboard={fullKeyboard}
+        isAccompanimentActive={Boolean(accompanimentSong)}
         onTogglePlay={handleTogglePlay}
         onRestart={handleRestart}
         onStepMeasure={handleStepMeasure}
@@ -306,6 +331,7 @@ export default function App() {
         onCycleNoteLabelMode={handleCycleNoteLabelMode}
         onToggleEffects={() => handleUpdateSettings({ effectsEnabled: !settings.effectsEnabled })}
         onToggleFullKeyboard={() => setFullKeyboard((v) => !v)}
+        onOpenAccompaniment={() => setShowAccompaniment(true)}
         onOpenLibrary={() => setShowLibrary(true)}
         onOpenSettings={() => setShowSettings(true)}
       />
@@ -316,6 +342,25 @@ export default function App() {
           <span>{t(settings.language, 'portraitHint')}</span>
         </div>
       )}
+
+      <ChordRibbon
+        language={settings.language}
+        detectedKey={liveHarmony.key}
+        chords={liveHarmony.chords}
+        currentTimeSec={snapshot.currentTimeSec}
+        transpose={snapshot.transpose}
+        noteLabelMode={settings.noteLabelMode}
+        isAccompanimentActive={Boolean(accompanimentSong)}
+        activeStyleLabel={
+          activeStyleMeta
+            ? settings.language === 'vi'
+              ? activeStyleMeta.nameVi
+              : activeStyleMeta.nameEn
+            : undefined
+        }
+        onOpenStudio={() => setShowAccompaniment(true)}
+        onReturnOriginal={handleReturnOriginal}
+      />
 
       <PianoStage
         song={currentSong}
@@ -330,16 +375,26 @@ export default function App() {
         onSnapshotTick={setSnapshot}
       />
 
+      {showAccompaniment && (
+        <AccompanimentModal
+          language={settings.language}
+          originalSong={originalSong}
+          isAccompanimentActive={Boolean(accompanimentSong)}
+          activeStyleId={activeStyleId}
+          onApplyAccompaniment={handleApplyAccompaniment}
+          onReturnOriginal={handleReturnOriginal}
+          onClose={() => setShowAccompaniment(false)}
+        />
+      )}
+
       {showLibrary && (
         <LibraryModal
           language={settings.language}
           songs={songs}
-          currentSongId={currentSong.id}
-          omrServerUrl={settings.omrServerUrl}
+          currentSongId={originalSong.id}
           onSelectSong={selectSong}
           onImportSong={handleImportSong}
           onDeleteSong={handleDeleteSong}
-          onOpenSettings={() => setShowSettings(true)}
           onClose={() => setShowLibrary(false)}
         />
       )}

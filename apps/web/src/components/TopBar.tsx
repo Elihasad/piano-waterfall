@@ -50,6 +50,7 @@ interface TopBarProps {
   noteLabelMode: NoteLabelMode;
   effectsEnabled: boolean;
   fullKeyboard: boolean;
+  isAccompanimentActive?: boolean;
   onTogglePlay: () => void;
   onRestart: () => void;
   onStepMeasure: (delta: -1 | 1) => void;
@@ -63,6 +64,7 @@ interface TopBarProps {
   onCycleNoteLabelMode: () => void;
   onToggleEffects: () => void;
   onToggleFullKeyboard: () => void;
+  onOpenAccompaniment?: () => void;
   onOpenLibrary: () => void;
   onOpenSettings: () => void;
 }
@@ -92,6 +94,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   noteLabelMode,
   effectsEnabled,
   fullKeyboard,
+  isAccompanimentActive = false,
   onTogglePlay,
   onRestart,
   onStepMeasure,
@@ -105,6 +108,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onCycleNoteLabelMode,
   onToggleEffects,
   onToggleFullKeyboard,
+  onOpenAccompaniment,
   onOpenLibrary,
   onOpenSettings,
 }) => {
@@ -247,6 +251,23 @@ export const TopBar: React.FC<TopBarProps> = ({
         </div>
 
         {/* Sound Preset Popover Trigger */}
+        {/* Accompaniment / Chords Studio */}
+        {onOpenAccompaniment && (
+          <button
+            type="button"
+            onClick={onOpenAccompaniment}
+            aria-label={language === 'vi' ? 'Đệm Hát & Gam' : 'Accompaniment & Chords'}
+            className={`flex items-center gap-1 px-2.5 h-9 rounded-lg text-xs font-bold shrink-0 transition ${
+              isAccompanimentActive
+                ? 'bg-violet-600 text-white shadow-sm shadow-violet-600/40'
+                : 'bg-violet-950/60 border border-violet-500/40 text-violet-200 hover:bg-violet-900/50'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>{language === 'vi' ? 'Đệm Hát' : 'Chords'}</span>
+          </button>
+        )}
+
         <button
           type="button"
           onClick={() => setOpenPopover(openPopover === 'sound' ? null : 'sound')}

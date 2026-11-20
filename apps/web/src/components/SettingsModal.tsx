@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { X, Usb, CheckCircle2, AlertCircle, Loader2, Sparkles } from 'lucide-react';
+import { X, Usb } from 'lucide-react';
 import { t } from '../core/i18n';
-import { checkOmrHealth } from '../core/omrClient';
 import type { AppSettings, Language, SoundPreset } from '../core/types';
 
 interface SettingsModalProps {
@@ -23,29 +22,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const [language, setLanguage] = useState<Language>(settings.language);
   const [soundPreset, setSoundPreset] = useState<SoundPreset>(settings.soundPreset);
-  const [omrUrl, setOmrUrl] = useState(settings.omrServerUrl);
   const [showKeyLabels, setShowKeyLabels] = useState(settings.showKeyLabels);
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
-
-  const handleTest = async () => {
-    setTesting(true);
-    setTestResult(null);
-    const res = await checkOmrHealth(omrUrl);
-    setTesting(false);
-    if (res.ok) {
-      setTestResult({ ok: true, text: `Connected! (Engine: ${res.engine || 'homr'})` });
-    } else {
-      setTestResult({ ok: false, text: res.error || 'Connection failed.' });
-    }
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave({
       language,
       soundPreset,
-      omrServerUrl: omrUrl.trim(),
       showKeyLabels,
     });
     onClose();
@@ -60,7 +43,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="flex items-center justify-between px-4 py-3 border-b border-[#2c2e3b]">
           <h2 className="text-sm font-bold text-slate-100">
             {t(language, 'settingsTitle')}{' '}
-            <span className="text-[11px] font-normal text-slate-400">v1.3.3</span>
+            <span className="text-[11px] font-normal text-slate-400">v1.3.4</span>
           </h2>
           <button
             type="button"
@@ -166,60 +149,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               className="w-4 h-4 accent-violet-500"
             />
           </label>
-
-          {/* Optional High-Accuracy AI OMR Server (homr / Audiveris) */}
-          <div className="rounded-xl bg-[#14151c] border border-[#262836] p-3 space-y-2">
-            <label className="font-semibold text-slate-200 flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-violet-400" />
-              {t(language, 'omrUrlLabel')}
-            </label>
-            <input
-              type="url"
-              value={omrUrl}
-              onChange={(e) => setOmrUrl(e.target.value)}
-              placeholder="https://xxxx.trycloudflare.com"
-              className="w-full rounded-lg bg-[#121216] border border-[#2c2e3b] px-3 py-2 text-slate-100 placeholder:text-slate-500"
-            />
-            <p className="text-[11px] text-slate-400 leading-relaxed">{t(language, 'omrUrlDesc')}</p>
-            <div className="flex flex-wrap items-center gap-2">
-              <a
-                href="https://colab.research.google.com/github/Elihasad/piano-waterfall/blob/main/services/omr-backend/Piano_Waterfall_AI_OMR_Colab.ipynb"
-                target="_blank"
-                rel="noreferrer"
-                className="px-3 py-1.5 rounded-lg bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/40 text-violet-200 font-semibold inline-flex items-center gap-1.5"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                {language === 'vi' ? 'Mở AI OMR Miễn phí (Colab)' : 'Launch Free AI OMR (Colab)'}
-              </a>
-              {omrUrl.trim() && (
-                <button
-                  type="button"
-                  onClick={handleTest}
-                  disabled={testing}
-                  className="px-3 py-1.5 rounded-lg bg-[#242632] hover:bg-[#2f3242] text-slate-200 font-semibold flex items-center gap-1.5"
-                >
-                  {testing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  {t(language, 'testConnection')}
-                </button>
-              )}
-            </div>
-            {testResult && (
-              <div
-                className={`flex items-start gap-1.5 p-2 rounded-lg text-[11px] ${
-                  testResult.ok
-                    ? 'bg-emerald-950/50 text-emerald-300 border border-emerald-500/30'
-                    : 'bg-rose-950/50 text-rose-300 border border-rose-500/30'
-                }`}
-              >
-                {testResult.ok ? (
-                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                ) : (
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                )}
-                <span>{testResult.text}</span>
-              </div>
-            )}
-          </div>
         </div>
 
         <div className="flex justify-end gap-2 px-4 py-3 border-t border-[#2c2e3b]">
