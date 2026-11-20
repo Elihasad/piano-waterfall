@@ -73,8 +73,11 @@ export function parseMidiBuffer(buffer: ArrayBuffer, fallbackTitle: string): Son
   const minMidi = notes.length > 0 ? notes.reduce((acc, n) => Math.min(acc, n.midi), 108) : 60;
   const maxMidi = notes.length > 0 ? notes.reduce((acc, n) => Math.max(acc, n.midi), 21) : 72;
 
-  const title =
-    midi.name?.trim() || fallbackTitle.replace(/\.(mid|midi)$/i, '') || 'Untitled MIDI';
+  const cleanedFilename = fallbackTitle
+    .replace(/\.(mid|midi)$/i, '')
+    .replace(/_+/g, ' ')
+    .trim();
+  const title = cleanedFilename || midi.name?.trim() || 'Untitled MIDI';
 
   return {
     id: generateId('song'),

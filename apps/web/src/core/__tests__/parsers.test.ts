@@ -133,6 +133,22 @@ describe('MusicXML & MIDI parsers', () => {
     expect(song.notes.find((n) => n.midi === 48)?.hand).toBe('left');
   });
 
+  it('uses uploaded MIDI filename instead of generic internal track name like "Piano"', () => {
+    const midi = new Midi();
+    midi.header.name = 'Piano';
+    const track = midi.addTrack();
+    track.name = 'Piano';
+    track.addNote({ midi: 60, time: 0, duration: 0.5, velocity: 0.8 });
+
+    const bytes = midi.toArray();
+    const buffer = bytes.buffer.slice(
+      bytes.byteOffset,
+      bytes.byteOffset + bytes.byteLength,
+    ) as ArrayBuffer;
+    const song = parseMidiBuffer(buffer, 'LilaS_Sawano.mid');
+    expect(song.title).toBe('LilaS Sawano');
+  });
+
   it('rejects unsupported file extensions in parseSongFile', async () => {
     const file = new File(['hello'], 'notes.txt', { type: 'text/plain' });
     await expect(parseSongFile(file)).rejects.toThrow(/Không hỗ trợ|Unsupported/i);
