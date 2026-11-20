@@ -9,11 +9,37 @@ const FAKE_OPS = {
   moveTo: 13,
   lineTo: 14,
   curveTo: 15,
+  closePath: 18,
   rectangle: 19,
   constructPath: 91,
 };
 
 describe('pdfVectorExtractor & vector-assisted SMuFL OMR', () => {
+  it('extracts barlines, beams, and ties from pdfjs-dist constructPath TypedArrays (Float32Array/Int32Array)', () => {
+    const subOps = new Int32Array([
+      FAKE_OPS.moveTo,
+      FAKE_OPS.lineTo,
+      FAKE_OPS.rectangle,
+      FAKE_OPS.moveTo,
+      FAKE_OPS.curveTo,
+    ]);
+    const subCoords = new Float32Array([
+      250, 600,
+      250, 710,
+      100, 725, 60, 4,
+      180, 700,
+      190, 692, 205, 692, 215, 700,
+    ]);
+
+    const geom = extractVectorGeometryFromOps(
+      [FAKE_OPS.constructPath],
+      [[subOps, subCoords]],
+      FAKE_OPS,
+    );
+    expect(geom.barlines.some((b) => Math.abs(b.x - 250) < 1 && b.yMax - b.yMin >= 100)).toBe(true);
+    expect(geom.beams.some((b) => Math.abs(b.x1 - 100) < 1 && Math.abs(b.x2 - 160) < 1)).toBe(true);
+    expect(geom.ties.some((t) => Math.abs(t.x1 - 180) < 1 && Math.abs(t.x2 - 215) < 1)).toBe(true);
+  });
   it('extracts barlines, horizontal beams, and curved ties from PDF operator lists', () => {
     const fnArray = [
       FAKE_OPS.save,

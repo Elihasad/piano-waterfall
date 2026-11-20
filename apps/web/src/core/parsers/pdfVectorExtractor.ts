@@ -89,8 +89,14 @@ export function extractVectorGeometryFromOps(
     polyPts = [];
   };
 
-  const processPathOp = (op: number, coords: number[], coordIdx: { i: number }) => {
-    if (op === ops.moveTo) {
+function isNumericSequence(val: unknown): val is ArrayLike<number> {
+  return Array.isArray(val) || ArrayBuffer.isView(val);
+}
+
+  const processPathOp = (op: number, coords: ArrayLike<number>, coordIdx: { i: number }) => {
+    if (op === ops.closePath) {
+      flushPolygon();
+    } else if (op === ops.moveTo) {
       flushPolygon();
       const [x, y] = applyMatrix(ctm, coords[coordIdx.i++], coords[coordIdx.i++]);
       curX = x;
@@ -164,15 +170,15 @@ export function extractVectorGeometryFromOps(
       flushPolygon();
       const prev = stack.pop();
       if (prev) ctm = prev;
-    } else if (fn === ops.transform && Array.isArray(args) && args.length >= 6) {
-      ctm = multiplyMatrix(ctm, args.slice(0, 6) as Matrix6);
+    } else if (fn === ops.transform && isNumericSequence(args) && args.length >= 6) {
+      ctm = multiplyMatrix(ctm, [args[0], args[1], args[2], args[3], args[4], args[5]]);
     } else if (fn === ops.constructPath && Array.isArray(args) && args.length >= 2) {
-      const subOps = args[0] as number[];
-      const subCoords = args[1] as number[];
-      if (Array.isArray(subOps) && Array.isArray(subCoords)) {
+      const subOps = args[0];
+      const subCoords = args[1];
+      if (isNumericSequence(subOps) && isNumericSequence(subCoords)) {
         const coordIdx = { i: 0 };
-        for (const subOp of subOps) {
-          processPathOp(subOp, subCoords, coordIdx);
+        for (let k = 0; k < subOps.length; k++) {
+          processPathOp(subOps[k], subCoords, coordIdx);
         }
         flushPolygon();
       }
@@ -182,10 +188,11 @@ export function extractVectorGeometryFromOps(
       fn === ops.curveTo ||
       fn === ops.curveTo2 ||
       fn === ops.curveTo3 ||
-      fn === ops.rectangle
+      fn === ops.rectangle ||
+      fn === ops.closePath
     ) {
-      if (Array.isArray(args)) {
-        processPathOp(fn, args as number[], { i: 0 });
+      if (isNumericSequence(args)) {
+        processPathOp(fn, args, { i: 0 });
       }
     }
   }
