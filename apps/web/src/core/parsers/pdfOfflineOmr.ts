@@ -288,7 +288,7 @@ export function extractNotesFromSmuflItems(
     systems.forEach((sys, sIdx) => {
       for (const st of sys) {
         const dist = Math.abs(ng.y - st.anchorY);
-        if (dist < bestDist && dist < st.fontSize * 2.4) {
+        if (dist < bestDist && dist < st.fontSize * 3.0) {
           bestDist = dist;
           bestSysIdx = sIdx;
           bestStaff = st;
@@ -351,9 +351,9 @@ export function extractNotesFromSmuflItems(
         // Count stacked vector beams intersecting this note's stem X within this staff's vertical reach
         const matchingBeams = geometry.beams.filter(
           (b) =>
-            ng.x >= b.x1 - st.fontSize * 0.28 &&
-            ng.x <= b.x2 + st.fontSize * 0.28 &&
-            Math.abs(b.y - ng.y) <= st.fontSize * 2.1,
+            ng.x >= b.x1 - st.fontSize * 0.45 &&
+            ng.x <= b.x2 + st.fontSize * 0.45 &&
+            Math.abs(b.y - ng.y) <= st.fontSize * 2.6,
         );
         // Deduplicate beam Y levels within 2.5px
         const distinctLevels: number[] = [];
@@ -391,7 +391,8 @@ export function extractNotesFromSmuflItems(
 
     sysNotes.sort((a, b) => a.x - b.x);
     const fontSize = sys[0].fontSize;
-    const clusterTol = Math.max(4, fontSize * 0.32);
+    // Tight chord clustering so consecutive repeated 16th notes are NOT swallowed as one chord
+    const clusterTol = Math.max(2.5, fontSize * 0.16);
 
     // Determine system bottom bound to match pedal marks
     const sysBotY = Math.min(...sys.map((st) => st.anchorY)) - fontSize * 0.8;
@@ -505,27 +506,41 @@ export function extractNotesFromSmuflItems(
           events.sort((a, b) => a.x - b.x);
 
           const totalEventBeats = events.reduce((acc, ev) => acc + ev.beats, 0);
-          const exactFit = totalEventBeats <= beatsPerMeasure + 0.51;
-          const mWidth = Math.max(1, mb.xEnd - mb.xStart);
+          // Only use strict cumulative beats when the measure sums accurately to beatsPerMeasure;
+          // otherwise distribute proportionally across the measure to avoid dead end-of-measure gaps!
+          const exactFit = Math.abs(totalEventBeats - beatsPerMeasure) <= 0.26;
+          const firstEvX = events[0].x;
+          const mSpan = Math.max(1, mb.xEnd - firstEvX);
 
           let cumBeat = 0;
-          events.forEach((ev) => {
+          events.forEach((ev, evIdx) => {
             let beatOffset: number;
             if (exactFit) {
               beatOffset = cumBeat;
               cumBeat += ev.beats;
             } else {
-              const normX = Math.max(0, Math.min(0.95, (ev.x - mb.xStart) / mWidth));
+              const normX = Math.max(0, Math.min(0.95, (ev.x - firstEvX) / mSpan));
               beatOffset = Math.round(normX * beatsPerMeasure * 4) / 4;
             }
 
             if (ev.type === 'chord') {
+              const nextEv = events[evIdx + 1];
+              const nextBeat = nextEv
+                ? exactFit
+                  ? beatOffset + ev.beats
+                  : Math.round(Math.max(0, Math.min(0.95, (nextEv.x - firstEvX) / mSpan)) * beatsPerMeasure * 4) / 4
+                : beatsPerMeasure;
+              const gapToNext = Math.max(0.25, nextBeat - beatOffset);
+
               const seenMidis = new Set<number>();
               for (const item of ev.notes) {
                 if (seenMidis.has(item.midi)) continue;
                 seenMidis.add(item.midi);
-                let durBeats = item.exactBeats;
-                // When Ped. is active in this measure, allow left-hand bass notes to ring smoothly
+                let durBeats = exactFit
+                  ? item.exactBeats
+                  : item.kind === 'whole' || item.kind === 'half'
+                    ? Math.min(beatsPerMeasure - beatOffset, item.exactBeats)
+                    : Math.min(item.exactBeats, gapToNext);
                 if (hasPedalInMeasure && hand === 'left' && durBeats < 1.5) {
                   durBeats = Math.min(beatsPerMeasure - beatOffset, Math.max(durBeats, 1.5));
                 }
@@ -623,25 +638,27 @@ export function extractNotesFromSmuflItems(
     }
   });
 
-  // Merge tied notes using PDF vector tie arcs!
+  // Merge tied notes using short PDF vector tie arcs (strictly adjacent same-pitch notes only, avoiding slurs!)
   const removedIndices = new Set<number>();
   if (geometry && geometry.ties.length > 0 && emittedNotes.length > 1) {
     for (const tie of geometry.ties) {
+      const tieSpan = tie.x2 - tie.x1;
+      if (tieSpan > 80) continue; // Long arcs are phrase slurs, not ties
       let startIdx = -1;
       let endIdx = -1;
       for (let i = 0; i < emittedNotes.length; i++) {
         if (removedIndices.has(i)) continue;
         const n = emittedNotes[i];
-        const fontSize = 24;
-        if (Math.abs(n.pdfY - tie.y) > fontSize * 0.75) continue;
-        if (Math.abs(n.pdfX - tie.x1) <= fontSize * 0.65) {
+        const refSize = 24;
+        if (Math.abs(n.pdfY - tie.y) > refSize * 0.45) continue;
+        if (startIdx < 0 && Math.abs(n.pdfX - tie.x1) <= refSize * 0.45) {
           startIdx = i;
         } else if (
           startIdx >= 0 &&
           n.midi === emittedNotes[startIdx].midi &&
           n.hand === emittedNotes[startIdx].hand &&
           n.sysIdx === emittedNotes[startIdx].sysIdx &&
-          Math.abs(n.pdfX - tie.x2) <= fontSize * 0.65
+          Math.abs(n.pdfX - tie.x2) <= refSize * 0.45
         ) {
           endIdx = i;
           break;
@@ -650,9 +667,12 @@ export function extractNotesFromSmuflItems(
       if (startIdx >= 0 && endIdx >= 0) {
         const a = emittedNotes[startIdx];
         const b = emittedNotes[endIdx];
-        const mergedEnd = Math.max(a.startTimeSec + a.durationSec, b.startTimeSec + b.durationSec);
-        a.durationSec = mergedEnd - a.startTimeSec;
-        removedIndices.add(endIdx);
+        // Only merge if Note B starts close to when Note A ends
+        if (b.startTimeSec - (a.startTimeSec + a.durationSec) <= secPerBeat * 0.75) {
+          const mergedEnd = Math.max(a.startTimeSec + a.durationSec, b.startTimeSec + b.durationSec);
+          a.durationSec = mergedEnd - a.startTimeSec;
+          removedIndices.add(endIdx);
+        }
       }
     }
   }
