@@ -10,7 +10,304 @@ export interface DetectedStaff {
   hand: Hand;
 }
 
+export interface SmuflTextItem {
+  str: string;
+  x: number;
+  y: number;
+  fontSize: number;
+}
+
 const MAJOR_SCALE_OFFSETS = [0, 2, 4, 5, 7, 9, 11]; // C D E F G A B
+const FLAT_ORDER_DEGREES = [6, 2, 5, 1, 4, 0, 3]; // B E A D G C F
+const SHARP_ORDER_DEGREES = [3, 0, 4, 1, 5, 2, 6]; // F C G D A E B
+
+// SMuFL Unicode code points (Bravura / Leland / Petaluma — MuseScore, Dorico, Sibelius)
+const SMUFL_G_CLEF = '\uE050';
+const SMUFL_F_CLEF = '\uE062';
+const SMUFL_NOTE_BLACK = '\uE0A4';
+const SMUFL_NOTE_HALF = '\uE0A3';
+const SMUFL_NOTE_WHOLE = '\uE0A2';
+const SMUFL_FLAT = '\uE260';
+const SMUFL_NATURAL = '\uE261';
+const SMUFL_SHARP = '\uE262';
+
+function diatonicWithAccidentalToMidi(diatonic: number, accidentalOffset: number): number {
+  const octave = Math.floor(diatonic / 7);
+  const degree = ((diatonic % 7) + 7) % 7;
+  return clampMidi((octave + 1) * 12 + MAJOR_SCALE_OFFSETS[degree] + accidentalOffset);
+}
+
+/**
+ * High-precision offline extractor for SMuFL vector PDFs (MuseScore, Dorico, Sibelius, etc.).
+ * Reads exact glyph coordinates (clefs, key signatures, accidentals, noteheads, tempo)
+ * directly from pdf.js text items with zero image noise.
+ */
+export function extractNotesFromSmuflItems(
+  items: SmuflTextItem[],
+  startMeasureNumber: number,
+  startTimeSec: number,
+  defaultBpm = 100,
+): {
+  notes: NoteEvent[];
+  measures: MeasureEvent[];
+  nextMeasureNumber: number;
+  endTimeSec: number;
+  detectedBpm?: number;
+} {
+  let detectedBpm: number | undefined;
+  for (const item of items) {
+    const m = item.str.match(/=\s*(\d{2,3})\b/);
+    if (m) {
+      const val = Number.parseInt(m[1], 10);
+      if (val >= 30 && val <= 260) {
+        detectedBpm = val;
+        break;
+      }
+    }
+  }
+  const bpm = detectedBpm ?? defaultBpm;
+  const secPerBeat = 60 / bpm;
+
+  // Flatten multi-glyph runs into individual glyph items
+  const glyphs: Array<{ ch: string; x: number; y: number; fontSize: number }> = [];
+  for (const item of items) {
+    if (!item.str) continue;
+    const chars = Array.from(item.str);
+    chars.forEach((ch, idx) => {
+      glyphs.push({
+        ch,
+        x: item.x + idx * (item.fontSize * 0.35),
+        y: item.y,
+        fontSize: item.fontSize || 20,
+      });
+    });
+  }
+
+  interface SmuflStaff {
+    clef: 'treble' | 'bass';
+    hand: Hand;
+    x: number;
+    anchorY: number; // G4 line for treble, F3 line for bass
+    fontSize: number;
+    stepPx: number; // 1 diatonic half-step = fontSize / 8
+    keyAccidentals: Map<number, number>; // degree (0..6) -> -1 | +1
+  }
+
+  const clefs = glyphs
+    .filter((g) => g.ch === SMUFL_G_CLEF || g.ch === SMUFL_F_CLEF)
+    .sort((a, b) => b.y - a.y); // Top of page (higher PDF Y) to bottom
+
+  if (clefs.length === 0) {
+    return {
+      notes: [],
+      measures: [],
+      nextMeasureNumber: startMeasureNumber,
+      endTimeSec: startTimeSec,
+      detectedBpm,
+    };
+  }
+
+  // Deduplicate clefs that are mid-line clef changes (keep leftmost clef per staff row)
+  const rowClefs: typeof clefs = [];
+  for (const c of clefs) {
+    const sameRow = rowClefs.find((rc) => Math.abs(rc.y - c.y) < c.fontSize * 0.7);
+    if (!sameRow) {
+      rowClefs.push(c);
+    } else if (c.x < sameRow.x) {
+      sameRow.x = c.x;
+      sameRow.ch = c.ch;
+      sameRow.y = c.y;
+    }
+  }
+
+  const accidentals = glyphs.filter(
+    (g) => g.ch === SMUFL_FLAT || g.ch === SMUFL_SHARP || g.ch === SMUFL_NATURAL,
+  );
+  const noteGlyphs = glyphs.filter(
+    (g) => g.ch === SMUFL_NOTE_BLACK || g.ch === SMUFL_NOTE_HALF || g.ch === SMUFL_NOTE_WHOLE,
+  );
+
+  if (noteGlyphs.length === 0) {
+    return {
+      notes: [],
+      measures: [],
+      nextMeasureNumber: startMeasureNumber,
+      endTimeSec: startTimeSec,
+      detectedBpm,
+    };
+  }
+
+  const staves: SmuflStaff[] = rowClefs.map((c) => {
+    const clef: 'treble' | 'bass' = c.ch === SMUFL_F_CLEF ? 'bass' : 'treble';
+    const fontSize = c.fontSize > 4 ? c.fontSize : 20;
+    const stepPx = fontSize / 8;
+
+    // Detect key signature accidentals immediately to the right of the clef
+    const keyFlats = accidentals.filter(
+      (a) =>
+        a.ch === SMUFL_FLAT &&
+        a.x > c.x &&
+        a.x - c.x < fontSize * 3.2 &&
+        Math.abs(a.y - c.y) < fontSize * 1.1,
+    );
+    const keySharps = accidentals.filter(
+      (a) =>
+        a.ch === SMUFL_SHARP &&
+        a.x > c.x &&
+        a.x - c.x < fontSize * 3.2 &&
+        Math.abs(a.y - c.y) < fontSize * 1.1,
+    );
+
+    const keyAccidentals = new Map<number, number>();
+    if (keyFlats.length >= keySharps.length && keyFlats.length > 0) {
+      const count = Math.min(7, keyFlats.length);
+      for (let i = 0; i < count; i++) keyAccidentals.set(FLAT_ORDER_DEGREES[i], -1);
+    } else if (keySharps.length > 0) {
+      const count = Math.min(7, keySharps.length);
+      for (let i = 0; i < count; i++) keyAccidentals.set(SHARP_ORDER_DEGREES[i], 1);
+    }
+
+    return {
+      clef,
+      hand: clef === 'bass' ? 'left' : 'right',
+      x: c.x,
+      anchorY: c.y,
+      fontSize,
+      stepPx,
+      keyAccidentals,
+    };
+  });
+
+  // Group staves into grand-staff systems (treble + bass pairs top-to-bottom)
+  const systems: SmuflStaff[][] = [];
+  for (let i = 0; i < staves.length; i++) {
+    const cur = staves[i];
+    const next = staves[i + 1];
+    if (cur.clef === 'treble' && next?.clef === 'bass' && cur.anchorY - next.anchorY < cur.fontSize * 5.5) {
+      systems.push([cur, next]);
+      i++;
+    } else {
+      systems.push([cur]);
+    }
+  }
+
+  // Assign each notehead to its closest staff vertically
+  const systemNotesMap = new Map<
+    number,
+    Array<{ x: number; midi: number; hand: Hand; durationBeats: number }>
+  >();
+
+  for (const ng of noteGlyphs) {
+    let bestSysIdx = -1;
+    let bestStaff: SmuflStaff | null = null;
+    let bestDist = Infinity;
+
+    systems.forEach((sys, sIdx) => {
+      for (const st of sys) {
+        const dist = Math.abs(ng.y - st.anchorY);
+        if (dist < bestDist && dist < st.fontSize * 2.4) {
+          bestDist = dist;
+          bestSysIdx = sIdx;
+          bestStaff = st;
+        }
+      }
+    });
+
+    if (bestSysIdx < 0 || !bestStaff) continue;
+    const st: SmuflStaff = bestStaff;
+
+    // Ignore noteheads left of clef
+    if (ng.x < st.x + st.fontSize * 0.5) continue;
+
+    const stepsFromAnchor = Math.round((ng.y - st.anchorY) / st.stepPx);
+    const anchorDiatonic = st.clef === 'treble' ? 32 : 24; // G4 = 32, F3 = 24
+    const diatonic = anchorDiatonic + stepsFromAnchor;
+    const degree = ((diatonic % 7) + 7) % 7;
+
+    // Check for inline accidental immediately left of notehead
+    let accOffset = st.keyAccidentals.get(degree) ?? 0;
+    const inlineAcc = accidentals.find(
+      (a) =>
+        a.x < ng.x &&
+        ng.x - a.x < st.fontSize * 0.85 &&
+        Math.abs(a.y - ng.y) < st.stepPx * 1.4 &&
+        a.x > st.x + st.fontSize * 1.2,
+    );
+    if (inlineAcc) {
+      accOffset =
+        inlineAcc.ch === SMUFL_FLAT ? -1 : inlineAcc.ch === SMUFL_SHARP ? 1 : 0;
+    }
+
+    const midi = diatonicWithAccidentalToMidi(diatonic, accOffset);
+    const durationBeats =
+      ng.ch === SMUFL_NOTE_WHOLE ? 4.0 : ng.ch === SMUFL_NOTE_HALF ? 2.0 : 0.75;
+
+    const arr = systemNotesMap.get(bestSysIdx) ?? [];
+    arr.push({ x: ng.x, midi, hand: st.hand, durationBeats });
+    systemNotesMap.set(bestSysIdx, arr);
+  }
+
+  const notes: NoteEvent[] = [];
+  const measures: MeasureEvent[] = [];
+  let curTime = startTimeSec;
+  let curMeasure = startMeasureNumber;
+  let idCounter = 0;
+
+  systems.forEach((sys, sIdx) => {
+    const sysNotes = systemNotesMap.get(sIdx);
+    if (!sysNotes || sysNotes.length === 0) return;
+
+    sysNotes.sort((a, b) => a.x - b.x);
+    const clusterTol = Math.max(4, sys[0].fontSize * 0.32);
+    const clusters: Array<typeof sysNotes> = [];
+    for (const n of sysNotes) {
+      const last = clusters[clusters.length - 1];
+      if (last && Math.abs(n.x - last[0].x) <= clusterTol) {
+        last.push(n);
+      } else {
+        clusters.push([n]);
+      }
+    }
+
+    const beatsPerStep = 0.5;
+    const systemDurationSec = Math.max(4 * secPerBeat, clusters.length * beatsPerStep * secPerBeat);
+    const systemMeasures = Math.max(1, Math.round(systemDurationSec / (4 * secPerBeat)));
+
+    for (let m = 0; m < systemMeasures; m++) {
+      measures.push({
+        number: curMeasure + m,
+        startTimeSec: curTime + m * 4 * secPerBeat,
+        endTimeSec: curTime + (m + 1) * 4 * secPerBeat,
+        beats: 4,
+        beatType: 4,
+      });
+    }
+
+    clusters.forEach((cluster, cIdx) => {
+      const noteStart = curTime + cIdx * beatsPerStep * secPerBeat;
+      const measureOffset = Math.floor((cIdx * beatsPerStep) / 4);
+      const seenMidis = new Set<number>();
+      for (const item of cluster) {
+        if (seenMidis.has(item.midi)) continue;
+        seenMidis.add(item.midi);
+        notes.push({
+          id: `smufl-${curMeasure}-${idCounter++}`,
+          midi: item.midi,
+          startTimeSec: noteStart,
+          durationSec: item.durationBeats * secPerBeat,
+          velocity: item.hand === 'left' ? 0.68 : 0.82,
+          hand: item.hand,
+          measureNumber: curMeasure + measureOffset,
+        });
+      }
+    });
+
+    curTime += systemMeasures * 4 * secPerBeat;
+    curMeasure += systemMeasures;
+  });
+
+  return { notes, measures, nextMeasureNumber: curMeasure, endTimeSec: curTime, detectedBpm };
+}
 
 export function diatonicStepToMidi(clef: 'treble' | 'bass', stepsFromBottomLine: number): number {
   const baseDiatonic = clef === 'treble' ? 30 : 18; // E4 = 30, G2 = 18
@@ -369,11 +666,46 @@ export async function parsePdfOffline(
   const allMeasures: MeasureEvent[] = [];
   let nextMeasure = 1;
   let currentTime = 0;
-  const bpm = 100;
+  let bpm = 100;
 
   for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
     onProgress?.({ currentPage: pageNum, totalPages });
     const page = await pdf.getPage(pageNum);
+
+    // 1. Try high-precision SMuFL vector text extraction first (MuseScore, Dorico, Sibelius PDFs)
+    let pageExtracted = false;
+    try {
+      const textContent = await page.getTextContent();
+      const smuflItems: SmuflTextItem[] = [];
+      for (const raw of textContent.items) {
+        if (!('str' in raw) || !raw.str) continue;
+        const tr = raw.transform as number[];
+        const fontSize = Math.hypot(tr[0], tr[1]) || Math.abs(tr[3]) || 20;
+        smuflItems.push({
+          str: raw.str,
+          x: tr[4],
+          y: tr[5],
+          fontSize,
+        });
+      }
+      const smuflRes = extractNotesFromSmuflItems(smuflItems, nextMeasure, currentTime, bpm);
+      if (smuflRes.detectedBpm && pageNum === 1) {
+        bpm = smuflRes.detectedBpm;
+      }
+      if (smuflRes.notes.length > 0) {
+        allNotes.push(...smuflRes.notes);
+        allMeasures.push(...smuflRes.measures);
+        nextMeasure = smuflRes.nextMeasureNumber;
+        currentTime = smuflRes.endTimeSec;
+        pageExtracted = true;
+      }
+    } catch {
+      // Fall through to raster OMR
+    }
+
+    if (pageExtracted) continue;
+
+    // 2. Fallback: Canvas grayscale raster OMR for scanned / non-SMuFL PDFs
     const viewport = page.getViewport({ scale: 2.2 });
     const canvas = document.createElement('canvas');
     canvas.width = Math.floor(viewport.width);

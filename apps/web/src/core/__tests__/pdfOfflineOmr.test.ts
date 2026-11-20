@@ -3,6 +3,8 @@ import {
   diatonicStepToMidi,
   detectStavesFromGrayscale,
   extractNotesFromGrayscalePage,
+  extractNotesFromSmuflItems,
+  type SmuflTextItem,
 } from '../parsers/pdfOfflineOmr';
 
 describe('pdfOfflineOmr', () => {
@@ -98,5 +100,35 @@ describe('pdfOfflineOmr', () => {
     const extracted = extractNotesFromGrayscalePage(gray, width, height, 1, 0, 100);
     expect(extracted.notes).toHaveLength(1);
     expect(extracted.notes[0].midi).toBe(67);
+  });
+
+  it('extracts exact pitches, key signature (1 flat = Bb), tempo, and hands from SMuFL PDF text items', () => {
+    // Emulate MuseScore SMuFL PDF coordinates (fontSize = 24 -> 1 diatonic step = 3px)
+    const items: SmuflTextItem[] = [
+      { str: '\uECA5 = 78', x: 80, y: 760, fontSize: 12 },
+      // Treble clef at y=700 (G4 anchor = 700), 1 flat (Bb) right after clef
+      { str: '\uE050', x: 50, y: 700, fontSize: 24 },
+      { str: '\uE260', x: 70, y: 706, fontSize: 24 }, // key signature flat
+      // Bass clef at y=620 (F3 anchor = 620), 1 flat right after clef
+      { str: '\uE062', x: 50, y: 620, fontSize: 24 },
+      { str: '\uE260', x: 70, y: 608, fontSize: 24 },
+      // Noteheads on Treble:
+      // G4 at y=700 (0 steps from G4 -> MIDI 67)
+      { str: '\uE0A4', x: 140, y: 700, fontSize: 24 },
+      // B4 at y=706 (+2 steps from G4 -> B4, flatted by key sig -> Bb4 = MIDI 70)
+      { str: '\uE0A4', x: 180, y: 706, fontSize: 24 },
+      // Half note F4 at y=697 (-1 step from G4 -> F4 = MIDI 65)
+      { str: '\uE0A3', x: 220, y: 697, fontSize: 24 },
+      // Notehead on Bass: F3 at y=620 (0 steps from F3 -> MIDI 53)
+      { str: '\uE0A4', x: 140, y: 620, fontSize: 24 },
+    ];
+
+    const res = extractNotesFromSmuflItems(items, 1, 0, 78);
+    expect(res.detectedBpm).toBe(78);
+    expect(res.notes).toHaveLength(4);
+    expect(res.notes.some((n) => n.hand === 'right' && n.midi === 67)).toBe(true);
+    expect(res.notes.some((n) => n.hand === 'right' && n.midi === 70)).toBe(true); // Bb4!
+    expect(res.notes.some((n) => n.hand === 'right' && n.midi === 65 && n.durationSec > 1.0)).toBe(true); // Half note!
+    expect(res.notes.some((n) => n.hand === 'left' && n.midi === 53)).toBe(true);
   });
 });
