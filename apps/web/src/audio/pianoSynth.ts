@@ -85,6 +85,7 @@ export class PianoSynth implements NotePlayer {
   private ctx: AudioContext | null = null;
   private dryGain: GainNode | null = null;
   private wetGain: GainNode | null = null;
+  private masterGain: GainNode | null = null;
   private lowShelf: BiquadFilterNode | null = null;
   private highShelf: BiquadFilterNode | null = null;
   private voices: ActiveVoice[] = [];
@@ -92,6 +93,7 @@ export class PianoSynth implements NotePlayer {
   private splendidPiano: SplendidGrandPiano | null = null;
   private splendidReady = false;
   private loadingStarted = false;
+  private mutedByStop = false;
   private preset: SoundPreset = 'grand';
   private lastChordTime = -1;
   private chordNoteCount = 0;
@@ -128,18 +130,23 @@ export class PianoSynth implements NotePlayer {
       compressor.attack.value = 0.004;
       compressor.release.value = 0.14;
 
+      const masterGain = ctx.createGain();
+      masterGain.gain.value = 1;
+
       lowShelf.connect(highShelf);
       highShelf.connect(dryGain);
       highShelf.connect(convolver);
       convolver.connect(wetGain);
       dryGain.connect(compressor);
       wetGain.connect(compressor);
-      compressor.connect(ctx.destination);
+      compressor.connect(masterGain);
+      masterGain.connect(ctx.destination);
 
       this.lowShelf = lowShelf;
       this.highShelf = highShelf;
       this.dryGain = dryGain;
       this.wetGain = wetGain;
+      this.masterGain = masterGain;
       this.applyPresetRouting();
       void this.preloadSamples();
       this.initSplendidGrand(ctx, lowShelf);
@@ -282,6 +289,13 @@ export class PianoSynth implements NotePlayer {
       void ctx.resume();
     }
 
+    if (this.mutedByStop && this.masterGain) {
+      const t = ctx.currentTime;
+      this.masterGain.gain.cancelScheduledValues(t);
+      this.masterGain.gain.setValueAtTime(1, t);
+      this.mutedByStop = false;
+    }
+
     while (this.voices.length >= MAX_POLYPHONY) {
       const oldest = this.voices.shift();
       oldest?.stop();
@@ -318,12 +332,24 @@ export class PianoSynth implements NotePlayer {
       const midiVel = Math.max(18, Math.min(127, Math.round(expressiveVel * 127)));
       // Register-aware natural sustain tail
       const registerTail = clamped < 52 ? 0.35 : clamped < 72 ? 0.18 : 0.08;
-      this.splendidPiano.start({
+      const stopFn = this.splendidPiano.start({
         note: clamped,
         velocity: midiVel,
         time: now,
         duration: holdDur + registerTail,
       });
+      if (typeof stopFn === 'function') {
+        const voice: ActiveVoice = {
+          stop: () => {
+            try {
+              stopFn(ctx.currentTime);
+            } catch {
+              // ignore
+            }
+          },
+        };
+        this.voices.push(voice);
+      }
       return;
     }
 
@@ -573,6 +599,14 @@ export class PianoSynth implements NotePlayer {
   }
 
   stopAll(): void {
+    // Immediately fade master bus to silence in 15ms so ZERO lookahead notes or reverb tails leak after Pause/Stop
+    if (this.ctx && this.masterGain) {
+      const t = this.ctx.currentTime;
+      this.masterGain.gain.cancelScheduledValues(t);
+      this.masterGain.gain.setValueAtTime(Math.max(0.0001, this.masterGain.gain.value), t);
+      this.masterGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.015);
+      this.mutedByStop = true;
+    }
     try {
       this.splendidPiano?.stop();
     } catch {

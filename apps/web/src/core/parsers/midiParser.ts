@@ -26,20 +26,36 @@ export function parseMidiBuffer(buffer: ArrayBuffer, fallbackTitle: string): Son
   const measureDurationSec = beats * (4 / beatType) * (60 / defaultBpm);
 
   const nonEmptyTracks = midi.tracks.filter((t) => t.notes.length > 0);
-  const hasTwoTracks = nonEmptyTracks.length >= 2;
+
+  // Determine per-track hand assignment smartly using track names & average pitch
+  // (prevents inverted colors when Track 0 is Bass/LH or when a MIDI has 3+ tracks)
+  const trackHands: Array<Hand | 'split'> = nonEmptyTracks.map((track) => {
+    const name = (track.name || '').toLowerCase();
+    if (/\b(left|lh|bass)\b/.test(name)) return 'left';
+    if (/\b(right|rh|treble|melody)\b/.test(name)) return 'right';
+    return 'split';
+  });
+
+  if (nonEmptyTracks.length === 2 && trackHands[0] === 'split' && trackHands[1] === 'split') {
+    const avg0 =
+      nonEmptyTracks[0].notes.reduce((s, n) => s + n.midi, 0) / nonEmptyTracks[0].notes.length;
+    const avg1 =
+      nonEmptyTracks[1].notes.reduce((s, n) => s + n.midi, 0) / nonEmptyTracks[1].notes.length;
+    if (Math.abs(avg0 - avg1) >= 4) {
+      trackHands[0] = avg0 >= avg1 ? 'right' : 'left';
+      trackHands[1] = avg0 >= avg1 ? 'left' : 'right';
+    }
+  }
 
   const notes: NoteEvent[] = [];
   let noteCounter = 0;
 
   nonEmptyTracks.forEach((track, trackIdx) => {
+    const assignedTrackHand = trackHands[trackIdx];
     track.notes.forEach((n) => {
       const clamped = clampMidi(n.midi);
-      let hand: Hand;
-      if (hasTwoTracks) {
-        hand = trackIdx === 0 ? 'right' : 'left';
-      } else {
-        hand = clamped < 60 ? 'left' : 'right';
-      }
+      const hand: Hand =
+        assignedTrackHand === 'split' ? (clamped < 60 ? 'left' : 'right') : assignedTrackHand;
       const startTimeSec = Math.max(0, n.time);
       const durationSec = Math.max(0.05, n.duration);
       const measureNumber = Math.floor(startTimeSec / measureDurationSec) + 1;
@@ -56,6 +72,36 @@ export function parseMidiBuffer(buffer: ArrayBuffer, fallbackTitle: string): Son
   });
 
   notes.sort((a, b) => a.startTimeSec - b.startTimeSec || a.midi - b.midi);
+
+  // Anti-crossing cleanup for simultaneous note clusters: if a 'right' note sits below a 'left' note
+  // at the same instant, sort hands cleanly by pitch so lower notes stay Left (green) and higher stay Right (blue)
+  let clusterStart = 0;
+  while (clusterStart < notes.length) {
+    let clusterEnd = clusterStart + 1;
+    while (
+      clusterEnd < notes.length &&
+      notes[clusterEnd].startTimeSec - notes[clusterStart].startTimeSec <= 0.03
+    ) {
+      clusterEnd++;
+    }
+    if (clusterEnd - clusterStart >= 2) {
+      const slice = notes.slice(clusterStart, clusterEnd);
+      const leftNotes = slice.filter((n) => n.hand === 'left');
+      const rightNotes = slice.filter((n) => n.hand === 'right');
+      if (leftNotes.length > 0 && rightNotes.length > 0) {
+        const maxLeft = Math.max(...leftNotes.map((n) => n.midi));
+        const minRight = Math.min(...rightNotes.map((n) => n.midi));
+        if (minRight < maxLeft) {
+          const sortedByPitch = [...slice].sort((a, b) => a.midi - b.midi);
+          const leftCount = leftNotes.length;
+          sortedByPitch.forEach((n, idx) => {
+            n.hand = idx < leftCount ? 'left' : 'right';
+          });
+        }
+      }
+    }
+    clusterStart = clusterEnd;
+  }
 
   const lastEnd = notes.reduce((acc, n) => Math.max(acc, n.startTimeSec + n.durationSec), 0);
   const totalMeasures = Math.max(1, Math.ceil(lastEnd / measureDurationSec));
