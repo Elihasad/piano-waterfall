@@ -4,17 +4,64 @@ export interface PublicDomainCatalogEntry {
   id: string;
   title: string;
   composer: string;
+  source?: string;
   era: 'Baroque' | 'Classical' | 'Romantic' | 'Impressionist' | 'Ragtime' | 'Traditional';
   difficulty: DifficultyTier;
   grade: PianoGrade;
   gradeNum: number; // 1..9
   keyLabel: string;
-  format: 'mxl';
+  format: 'mxl' | 'mid';
   fileName: string;
   rawUrl: string;
 }
 
-const RAW_BASE = 'https://raw.githubusercontent.com/musetrainer/library/main/scores/';
+const RAW_BASE = 'https://raw.githubusercontent.com/musetrainer/library/master/scores/';
+
+interface CompactCatalogRow {
+  id: string;
+  t: string;
+  c: string;
+  s: string;
+  e: PublicDomainCatalogEntry['era'];
+  d: DifficultyTier;
+  g: PianoGrade;
+  gn: number;
+  k: string;
+  f: 'mxl' | 'mid';
+  u: string;
+}
+
+let cachedFullCatalog: PublicDomainCatalogEntry[] | null = null;
+
+/**
+ * Lazily loads the deduplicated 3,190+ Public Domain Piano MusicXML/MIDI catalog index
+ * from `./catalog/public-domain-catalog.json` (falls back to the bundled 44 flagship scores offline).
+ */
+export async function loadFullPublicDomainCatalog(): Promise<PublicDomainCatalogEntry[]> {
+  if (cachedFullCatalog) return cachedFullCatalog;
+  try {
+    const res = await fetch('./catalog/public-domain-catalog.json');
+    if (!res.ok) return [...PUBLIC_DOMAIN_CATALOG];
+    const rows = (await res.json()) as CompactCatalogRow[];
+    cachedFullCatalog = rows.map((r) => ({
+      id: r.id,
+      title: r.t,
+      composer: r.c,
+      source: r.s,
+      era: r.e,
+      difficulty: r.d,
+      grade: r.g,
+      gradeNum: r.gn,
+      keyLabel: r.k,
+      format: r.f,
+      fileName: decodeURIComponent(r.u.split('/').pop() || `${r.id}.${r.f}`),
+      rawUrl: r.u,
+    }));
+    return cachedFullCatalog;
+  } catch {
+    return [...PUBLIC_DOMAIN_CATALOG];
+  }
+}
 
 function makeEntry(
   id: string,

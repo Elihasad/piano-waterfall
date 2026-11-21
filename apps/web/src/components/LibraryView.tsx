@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   ChevronLeft,
@@ -22,6 +22,7 @@ import { parseSongFile } from '../core/parsers';
 import { parsePdfOffline } from '../core/parsers/pdfOfflineOmr';
 import type { DifficultyTier, Language, PianoGrade, Song, SourceFormat } from '../core/types';
 import {
+  loadFullPublicDomainCatalog,
   PUBLIC_DOMAIN_CATALOG,
   type PublicDomainCatalogEntry,
 } from '../data/publicDomainCatalog';
@@ -75,8 +76,22 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   const [keyFilter, setKeyFilter] = useState<string>('all');
   const [formatFilter, setFormatFilter] = useState<'all' | SourceFormat>('all');
   const [eraFilter, setEraFilter] = useState<string>('all');
+  const [sourceFilter, setSourceFilter] = useState<string>('all');
   const [sortBy, setSortBy] = useState<SortKey>('newest');
   const [page, setPage] = useState(1);
+  const [catalogEntries, setCatalogEntries] = useState<PublicDomainCatalogEntry[]>(() => [
+    ...PUBLIC_DOMAIN_CATALOG,
+  ]);
+
+  useEffect(() => {
+    let active = true;
+    void loadFullPublicDomainCatalog().then((full) => {
+      if (active && full.length > 0) setCatalogEntries(full);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -100,10 +115,18 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
         if (s.detectedKey?.label) set.add(s.detectedKey.label);
       }
     } else {
-      for (const c of PUBLIC_DOMAIN_CATALOG) set.add(c.keyLabel);
+      for (const c of catalogEntries) set.add(c.keyLabel);
     }
     return Array.from(set).sort();
-  }, [activeTab, enrichedSongs]);
+  }, [activeTab, enrichedSongs, catalogEntries]);
+
+  const availableSources = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of catalogEntries) {
+      if (c.source) set.add(c.source);
+    }
+    return Array.from(set).sort();
+  }, [catalogEntries]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
@@ -217,6 +240,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     setKeyFilter('all');
     setFormatFilter('all');
     setEraFilter('all');
+    setSourceFilter('all');
     setSortBy('newest');
     setPage(1);
   };
@@ -227,7 +251,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     gradeFilter !== 'all' ||
     keyFilter !== 'all' ||
     formatFilter !== 'all' ||
-    eraFilter !== 'all';
+    eraFilter !== 'all' ||
+    sourceFilter !== 'all';
 
   // Filtered & sorted My Library (fast O(N) for 10,000+ songs!)
   const filteredMySongs = useMemo(() => {
@@ -255,19 +280,21 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     return sorted;
   }, [enrichedSongs, query, difficultyFilter, gradeFilter, formatFilter, keyFilter, sortBy]);
 
-  // Filtered & sorted Public Domain Catalog
+  // Filtered & sorted Public Domain Catalog (supports 3,190+ deduplicated scores instantly!)
   const filteredCatalog = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = PUBLIC_DOMAIN_CATALOG.filter((c) => {
+    const list = catalogEntries.filter((c) => {
       if (difficultyFilter !== 'all' && c.difficulty !== difficultyFilter) return false;
       if (gradeFilter !== 'all' && c.grade !== gradeFilter) return false;
       if (keyFilter !== 'all' && c.keyLabel !== keyFilter) return false;
       if (eraFilter !== 'all' && c.era !== eraFilter) return false;
+      if (sourceFilter !== 'all' && c.source !== sourceFilter) return false;
       if (!q) return true;
       return (
         c.title.toLowerCase().includes(q) ||
         c.composer.toLowerCase().includes(q) ||
-        c.era.toLowerCase().includes(q)
+        c.era.toLowerCase().includes(q) ||
+        (c.source?.toLowerCase().includes(q) ?? false)
       );
     });
 
@@ -276,7 +303,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     else if (sortBy === 'grade-desc') sorted.sort((a, b) => b.gradeNum - a.gradeNum);
     else sorted.sort((a, b) => a.gradeNum - b.gradeNum);
     return sorted;
-  }, [query, difficultyFilter, gradeFilter, keyFilter, eraFilter, sortBy]);
+  }, [catalogEntries, query, difficultyFilter, gradeFilter, keyFilter, eraFilter, sourceFilter, sortBy]);
 
   const totalItems = activeTab === 'my' ? filteredMySongs.length : filteredCatalog.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
@@ -356,8 +383,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               >
                 <Globe className="w-3.5 h-3.5" />
                 {isVi
-                  ? `Kho Nhạc Miễn Phí (${PUBLIC_DOMAIN_CATALOG.length})`
-                  : `Public Domain (${PUBLIC_DOMAIN_CATALOG.length})`}
+                  ? `Kho Nhạc Miễn Phí (${catalogEntries.length.toLocaleString()})`
+                  : `Public Domain (${catalogEntries.length.toLocaleString()})`}
               </button>
             </div>
           </div>
@@ -506,24 +533,44 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                 <option value="pdf">PDF</option>
               </select>
             ) : (
-              <select
-                aria-label="Filter by Era"
-                value={eraFilter}
-                onChange={(e) => {
-                  setEraFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="rounded-full bg-[#f8f6f1] border border-[#e7e3d9] px-3 py-1.5 text-xs font-semibold text-[#14151c]"
-              >
-                <option value="all">{isVi ? 'Mọi thời kỳ' : 'All Eras'}</option>
-                {['Baroque', 'Classical', 'Romantic', 'Impressionist', 'Ragtime', 'Traditional'].map(
-                  (era) => (
-                    <option key={era} value={era}>
-                      {era}
-                    </option>
-                  ),
+              <>
+                <select
+                  aria-label="Filter by Era"
+                  value={eraFilter}
+                  onChange={(e) => {
+                    setEraFilter(e.target.value);
+                    setPage(1);
+                  }}
+                  className="rounded-full bg-[#f8f6f1] border border-[#e7e3d9] px-3 py-1.5 text-xs font-semibold text-[#14151c]"
+                >
+                  <option value="all">{isVi ? 'Mọi thời kỳ' : 'All Eras'}</option>
+                  {['Baroque', 'Classical', 'Romantic', 'Impressionist', 'Ragtime', 'Traditional'].map(
+                    (era) => (
+                      <option key={era} value={era}>
+                        {era}
+                      </option>
+                    ),
+                  )}
+                </select>
+                {availableSources.length > 0 && (
+                  <select
+                    aria-label="Filter by Source"
+                    value={sourceFilter}
+                    onChange={(e) => {
+                      setSourceFilter(e.target.value);
+                      setPage(1);
+                    }}
+                    className="rounded-full bg-[#f8f6f1] border border-[#e7e3d9] px-3 py-1.5 text-xs font-semibold text-[#14151c]"
+                  >
+                    <option value="all">{isVi ? 'Mọi kho nguồn' : 'All Sources'}</option>
+                    {availableSources.map((src) => (
+                      <option key={src} value={src}>
+                        {src}
+                      </option>
+                    ))}
+                  </select>
                 )}
-              </select>
+              </>
             )}
 
             <select
@@ -673,7 +720,10 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                       {entry.title}
                     </h3>
                     <div className="text-xs text-[#4a4f5e]">
-                      {entry.composer} · <span className="font-mono uppercase text-[10px]">Public Domain · MXL</span>
+                      {entry.composer} ·{' '}
+                      <span className="font-mono uppercase text-[10px]">
+                        {entry.source || 'Public Domain'} · {entry.format}
+                      </span>
                     </div>
                   </div>
 
