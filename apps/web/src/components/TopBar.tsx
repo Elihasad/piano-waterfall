@@ -20,24 +20,33 @@ import {
   Plus,
   Piano,
   Usb,
-  BookOpen,
   Compass,
-  GraduationCap,
   Bell,
   Moon,
   Sun,
   Home,
+  Palette,
 } from 'lucide-react';
 import { t } from '../core/i18n';
 import { midiToNoteLabel } from '../core/noteNames';
 import type {
+  AppSettings,
   HandControlState,
+  HandSplitMode,
+  KeyboardLabelMode,
   Language,
   NoteLabelMode,
   PracticeMode,
   Song,
   SoundPreset,
 } from '../core/types';
+
+const COLOR_PRESETS: Array<{ name: string; left: string; right: string }> = [
+  { name: 'Classic', left: '#4ade80', right: '#22d3ee' },
+  { name: 'Synthesia', left: '#fb923c', right: '#38bdf8' },
+  { name: 'Neon', left: '#f472b6', right: '#2dd4bf' },
+  { name: 'Royal', left: '#a78bfa', right: '#fbbf24' },
+];
 
 interface TopBarProps {
   language: Language;
@@ -57,6 +66,11 @@ interface TopBarProps {
   hands: HandControlState;
   noteLabelMode: NoteLabelMode;
   effectsEnabled: boolean;
+  showFallingNoteLabels?: boolean;
+  keyboardLabelMode?: KeyboardLabelMode;
+  leftHandColor?: string;
+  rightHandColor?: string;
+  handSplitMode?: HandSplitMode;
   fullKeyboard: boolean;
   darkTheme?: boolean;
   isAccompanimentActive?: boolean;
@@ -72,6 +86,7 @@ interface TopBarProps {
   onHandsChange: (hands: HandControlState) => void;
   onCycleNoteLabelMode: () => void;
   onToggleEffects: () => void;
+  onUpdateDisplaySettings?: (partial: Partial<AppSettings>) => void;
   onToggleFullKeyboard: () => void;
   onToggleTheme?: () => void;
   onToggleMetronome?: () => void;
@@ -109,9 +124,13 @@ export const TopBar: React.FC<TopBarProps> = ({
   hands,
   noteLabelMode,
   effectsEnabled,
+  showFallingNoteLabels = true,
+  keyboardLabelMode = 'c-only',
+  leftHandColor = '#4ade80',
+  rightHandColor = '#22d3ee',
+  handSplitMode = 'auto',
   fullKeyboard,
   darkTheme = false,
-  isAccompanimentActive = false,
   onTogglePlay,
   onRestart,
   onStepMeasure,
@@ -124,18 +143,18 @@ export const TopBar: React.FC<TopBarProps> = ({
   onHandsChange,
   onCycleNoteLabelMode,
   onToggleEffects,
+  onUpdateDisplaySettings,
   onToggleFullKeyboard,
   onToggleTheme,
   onToggleMetronome,
   onOpenPracticePath,
-  onOpenAccompaniment,
-  onOpenTheory,
-  onOpenQuiz,
   onOpenHome,
   onOpenLibrary,
   onOpenSettings,
 }) => {
-  const [openPopover, setOpenPopover] = useState<'hands' | 'loop' | 'sound' | null>(null);
+  const [openPopover, setOpenPopover] = useState<'hands' | 'loop' | 'sound' | 'display' | null>(
+    null,
+  );
 
   const effectiveBpm = Math.round(song.defaultBpm * speedRatio);
   const currentMeasure =
@@ -317,49 +336,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           </button>
         </div>
 
-        {/* Accompaniment / Arrange */}
-        {onOpenAccompaniment && (
-          <button
-            type="button"
-            onClick={onOpenAccompaniment}
-            aria-label={language === 'vi' ? 'Đệm Hát & Gam' : 'Accompaniment & Chords'}
-            className={`flex items-center gap-1 px-2.5 h-9 rounded-full text-xs font-bold shrink-0 border transition ${
-              isAccompanimentActive
-                ? 'bg-[#4f46e5] text-white border-[#4f46e5]'
-                : 'bg-[#eceefe] text-[#4f46e5] border-[#4f46e5]/30 hover:bg-[#dfe2fd]'
-            }`}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>{language === 'vi' ? 'Đệm Hát' : 'Arrange'}</span>
-          </button>
-        )}
-
-        {/* Theory Guide */}
-        {onOpenTheory && (
-          <button
-            type="button"
-            onClick={onOpenTheory}
-            aria-label={language === 'vi' ? 'Hướng dẫn Lý thuyết Đệm Hát' : 'Piano Accompaniment Theory Guide'}
-            className="flex items-center gap-1 px-2.5 h-9 rounded-full text-xs font-bold shrink-0 bg-[#e1f4ea] border border-[#2f9e6c]/30 text-[#2f9e6c] hover:bg-[#d0edd9] transition"
-          >
-            <BookOpen className="w-3.5 h-3.5" />
-            <span>{language === 'vi' ? 'Lý thuyết' : 'Theory'}</span>
-          </button>
-        )}
-
-        {/* Contextual Note Reading Quiz */}
-        {onOpenQuiz && (
-          <button
-            type="button"
-            onClick={onOpenQuiz}
-            aria-label={language === 'vi' ? 'Đọc nốt' : 'Note Quiz'}
-            className="flex items-center gap-1 px-2.5 h-9 rounded-full text-xs font-semibold shrink-0 bg-[#f8f6f1] border border-[#e7e3d9] text-[#4a4f5e] hover:bg-[#edeae2] transition"
-          >
-            <GraduationCap className="w-3.5 h-3.5 text-[#4f46e5]" />
-            <span className="hidden lg:inline">{language === 'vi' ? 'Đọc nốt' : 'Quiz'}</span>
-          </button>
-        )}
-
+        {/* Sound Preset */}
         <button
           type="button"
           onClick={() => setOpenPopover(openPopover === 'sound' ? null : 'sound')}
@@ -388,12 +365,29 @@ export const TopBar: React.FC<TopBarProps> = ({
           <Sliders className="w-3.5 h-3.5" />
           <span className="inline-flex items-center gap-1">
             <span
-              className={`w-2 h-2 rounded-full ${hands.left.visual ? 'bg-[#34b8a2]' : 'bg-[#d0ccc2]'}`}
+              className="w-2.5 h-2.5 rounded-full"
+              style={{ background: hands.left.visual ? leftHandColor : '#d0ccc2' }}
             />
             <span
-              className={`w-2 h-2 rounded-full ${hands.right.visual ? 'bg-[#7a93ff]' : 'bg-[#d0ccc2]'}`}
+              className="w-2.5 h-2.5 rounded-full"
+              style={{ background: hands.right.visual ? rightHandColor : '#d0ccc2' }}
             />
           </span>
+        </button>
+
+        {/* Live Display, Colors, Effects & Note Labels Popover */}
+        <button
+          type="button"
+          onClick={() => setOpenPopover(openPopover === 'display' ? null : 'display')}
+          aria-label={language === 'vi' ? 'Màu sắc & Hiệu ứng' : 'Display & Colors'}
+          className={`flex items-center gap-1 px-2.5 h-9 rounded-full text-xs font-semibold shrink-0 border transition ${
+            openPopover === 'display'
+              ? 'bg-[#4f46e5] text-white border-[#4f46e5]'
+              : 'bg-[#eceefe] text-[#4f46e5] border-[#4f46e5]/30 hover:bg-[#dfe2fd]'
+          }`}
+        >
+          <Palette className="w-3.5 h-3.5" />
+          <span>{language === 'vi' ? 'Hiển thị' : 'Display'}</span>
         </button>
 
         {/* Note Label Mode */}
@@ -489,7 +483,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           min={0}
           max={song.durationSec}
           step={0.05}
-          value={currentTimeSec}
+          value={Math.max(0, currentTimeSec)}
           onChange={(e) => onSeek(Number(e.target.value))}
           aria-label={t(language, 'timelineScrubber')}
           className="flex-1 h-1.5 accent-violet-500 bg-[#2c2e3b] rounded-lg cursor-pointer"
@@ -743,6 +737,169 @@ export const TopBar: React.FC<TopBarProps> = ({
           >
             {t(language, 'done')}
           </button>
+        </div>
+      )}
+
+      {/* Live Display, Colors, Effects & Note Labels Popover */}
+      {openPopover === 'display' && (
+        <div className="absolute right-3 top-12 z-40 w-80 max-w-[92vw] rounded-2xl bg-[#181922] border border-[#2c2e3b] shadow-2xl p-3.5 space-y-3 text-xs text-slate-100">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-slate-100 flex items-center gap-1.5">
+              <Palette className="w-4 h-4 text-cyan-400" />
+              {language === 'vi' ? 'Màu sắc, Hiệu ứng & Nốt nhạc' : 'Colors, Effects & Labels'}
+            </span>
+            <button
+              type="button"
+              onClick={() => setOpenPopover(null)}
+              className="text-slate-400 hover:text-white text-[11px] font-semibold"
+            >
+              {t(language, 'done')}
+            </button>
+          </div>
+
+          {/* Preset Palettes */}
+          <div className="space-y-1.5">
+            <div className="text-[11px] text-slate-400 font-semibold">
+              {language === 'vi' ? 'Màu phím nhạc rơi (Tay trái / Tay phải)' : 'Falling Note Colors (LH / RH)'}
+            </div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {COLOR_PRESETS.map((p) => {
+                const active = leftHandColor === p.left && rightHandColor === p.right;
+                return (
+                  <button
+                    key={p.name}
+                    type="button"
+                    onClick={() =>
+                      onUpdateDisplaySettings?.({ leftHandColor: p.left, rightHandColor: p.right })
+                    }
+                    className={`py-1.5 px-1 rounded-lg border text-[10px] font-semibold flex flex-col items-center gap-1 transition ${
+                      active
+                        ? 'border-cyan-400 bg-cyan-500/15 text-white'
+                        : 'border-[#2c2e3b] bg-[#121216] text-slate-300 hover:border-slate-500'
+                    }`}
+                  >
+                    <span className="flex items-center gap-1">
+                      <span className="w-3 h-3 rounded-full" style={{ background: p.left }} />
+                      <span className="w-3 h-3 rounded-full" style={{ background: p.right }} />
+                    </span>
+                    <span>{p.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <label className="flex items-center justify-between bg-[#121216] border border-[#2c2e3b] rounded-lg px-2.5 py-1.5 cursor-pointer">
+                <span className="text-slate-200">{language === 'vi' ? 'Tay trái' : 'Left Hand'}</span>
+                <input
+                  type="color"
+                  value={leftHandColor}
+                  onChange={(e) => onUpdateDisplaySettings?.({ leftHandColor: e.target.value })}
+                  className="w-6 h-5 bg-transparent border-0 cursor-pointer"
+                />
+              </label>
+              <label className="flex items-center justify-between bg-[#121216] border border-[#2c2e3b] rounded-lg px-2.5 py-1.5 cursor-pointer">
+                <span className="text-slate-200">{language === 'vi' ? 'Tay phải' : 'Right Hand'}</span>
+                <input
+                  type="color"
+                  value={rightHandColor}
+                  onChange={(e) => onUpdateDisplaySettings?.({ rightHandColor: e.target.value })}
+                  className="w-6 h-5 bg-transparent border-0 cursor-pointer"
+                />
+              </label>
+            </div>
+          </div>
+
+          {/* Piano Keyboard Labels */}
+          <div className="space-y-1.5 pt-2 border-t border-[#2c2e3b]">
+            <div className="text-[11px] text-slate-400 font-semibold">
+              {language === 'vi' ? 'Tên nốt trên phím đàn' : 'Keyboard Labels'}
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {(
+                [
+                  ['c-only', language === 'vi' ? 'Chỉ nốt C' : 'C Only'],
+                  ['all', language === 'vi' ? 'Tất cả' : 'All Keys'],
+                  ['off', language === 'vi' ? 'Ẩn' : 'Hidden'],
+                ] as const
+              ).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() =>
+                    onUpdateDisplaySettings?.({
+                      keyboardLabelMode: mode,
+                      showKeyLabels: mode !== 'off',
+                    })
+                  }
+                  className={`py-1.5 rounded-lg font-semibold border transition ${
+                    keyboardLabelMode === mode
+                      ? 'bg-indigo-600 text-white border-indigo-500'
+                      : 'bg-[#121216] text-slate-300 border-[#2c2e3b]'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Hand Split Override */}
+          <div className="space-y-1.5 pt-2 border-t border-[#2c2e3b]">
+            <div className="text-[11px] text-slate-400 font-semibold">
+              {language === 'vi' ? 'Chia tay trái / phải' : 'Hand Separation'}
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {(
+                [
+                  ['auto', language === 'vi' ? 'Tự động' : 'Auto'],
+                  ['pitch', language === 'vi' ? 'Chia tại C4' : 'Split C4'],
+                  ['swap', language === 'vi' ? 'Đảo tay' : 'Swap'],
+                ] as const
+              ).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => onUpdateDisplaySettings?.({ handSplitMode: mode })}
+                  className={`py-1.5 rounded-lg font-semibold border transition ${
+                    handSplitMode === mode
+                      ? 'bg-indigo-600 text-white border-indigo-500'
+                      : 'bg-[#121216] text-slate-300 border-[#2c2e3b]'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Toggles: Falling Note Labels & Visual Effects */}
+          <div className="space-y-2 pt-2 border-t border-[#2c2e3b]">
+            <label className="flex items-center justify-between cursor-pointer">
+              <span className="text-slate-200 font-medium">
+                {language === 'vi' ? 'Tên nốt trên phím nhạc rơi' : 'Labels on falling notes'}
+              </span>
+              <input
+                type="checkbox"
+                checked={showFallingNoteLabels}
+                onChange={(e) =>
+                  onUpdateDisplaySettings?.({ showFallingNoteLabels: e.target.checked })
+                }
+                className="w-4 h-4 accent-indigo-500"
+              />
+            </label>
+            <label className="flex items-center justify-between cursor-pointer">
+              <span className="text-slate-200 font-medium">
+                {language === 'vi' ? 'Hiệu ứng phát sáng & hạt' : 'Glow & spark effects'}
+              </span>
+              <input
+                type="checkbox"
+                checked={effectsEnabled}
+                onChange={onToggleEffects}
+                className="w-4 h-4 accent-indigo-500"
+              />
+            </label>
+          </div>
         </div>
       )}
     </header>

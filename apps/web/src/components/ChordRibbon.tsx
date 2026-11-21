@@ -1,5 +1,5 @@
 import React from 'react';
-import { Music2, RotateCcw, Sparkles } from 'lucide-react';
+import { RotateCcw, Sparkles } from 'lucide-react';
 import {
   formatChordSymbol,
   formatPitchClass,
@@ -30,7 +30,6 @@ export const ChordRibbon: React.FC<ChordRibbonProps> = ({
   noteLabelMode,
   isAccompanimentActive,
   activeStyleLabel,
-  onOpenStudio,
   onReturnOriginal,
 }) => {
   if (chords.length === 0) return null;
@@ -95,22 +94,14 @@ export const ChordRibbon: React.FC<ChordRibbonProps> = ({
         )}
       </div>
 
-      <div className="flex items-center gap-1.5 shrink-0">
-        {activeStyleLabel && isAccompanimentActive && (
-          <span className="hidden md:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#e1f4ea] text-[#2f9e6c] text-[11px] font-semibold">
-            <Sparkles className="w-3 h-3" />
-            {activeStyleLabel}
-          </span>
-        )}
-        <button
-          type="button"
-          onClick={onOpenStudio}
-          className="px-2.5 py-0.5 rounded-full bg-white hover:bg-[#eceefe] border border-[#e7e3d9] text-[#4f46e5] text-[11px] font-semibold inline-flex items-center gap-1 transition"
-        >
-          <Music2 className="w-3 h-3" />
-          {language === 'vi' ? 'Đổi Style' : 'Style'}
-        </button>
-        {isAccompanimentActive && (
+      {isAccompanimentActive && (
+        <div className="flex items-center gap-1.5 shrink-0">
+          {activeStyleLabel && (
+            <span className="hidden md:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#e1f4ea] text-[#2f9e6c] text-[11px] font-semibold">
+              <Sparkles className="w-3 h-3" />
+              {activeStyleLabel}
+            </span>
+          )}
           <button
             type="button"
             onClick={onReturnOriginal}
@@ -119,8 +110,8 @@ export const ChordRibbon: React.FC<ChordRibbonProps> = ({
             <RotateCcw className="w-3 h-3" />
             {language === 'vi' ? 'Bản gốc' : 'Original'}
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

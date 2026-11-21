@@ -406,6 +406,11 @@ export default function App() {
             hands={snapshot.hands}
             noteLabelMode={settings.noteLabelMode}
             effectsEnabled={settings.effectsEnabled}
+            showFallingNoteLabels={settings.showFallingNoteLabels ?? true}
+            keyboardLabelMode={settings.keyboardLabelMode ?? 'c-only'}
+            leftHandColor={settings.leftHandColor ?? '#4ade80'}
+            rightHandColor={settings.rightHandColor ?? '#22d3ee'}
+            handSplitMode={settings.handSplitMode ?? 'auto'}
             fullKeyboard={fullKeyboard}
             darkTheme={darkTheme}
             isAccompanimentActive={Boolean(accompanimentSong)}
@@ -423,6 +428,7 @@ export default function App() {
             onToggleEffects={() =>
               handleUpdateSettings({ effectsEnabled: !settings.effectsEnabled })
             }
+            onUpdateDisplaySettings={handleUpdateSettings}
             onToggleFullKeyboard={() => setFullKeyboard((v) => !v)}
             onToggleTheme={() => setDarkTheme((d) => !d)}
             onToggleMetronome={handleToggleMetronome}
