@@ -147,4 +147,19 @@ describe('PlaybackClock', () => {
     expect(clock.getSnapshot().waitingMidis).toEqual([]);
     expect(clock.advance(0.2).currentTimeSec).toBeCloseTo(0.2, 3);
   });
+
+  it('delays the first note during the lead-in preparation window before t = 0', () => {
+    const { player, calls } = createFakePlayer();
+    const clock = new PlaybackClock(player);
+    clock.setLeadInSec(2.4);
+    clock.loadSong(TEST_SONG);
+    expect(clock.getSnapshot().currentTimeSec).toBeCloseTo(-2.4, 3);
+
+    clock.play();
+    clock.advance(1.5); // still at -0.9s, zero notes should have played yet!
+    expect(calls).toHaveLength(0);
+
+    clock.advance(1.0); // crosses 0.0s to +0.1s -> first chord plays cleanly!
+    expect(calls.map((c) => c.midi)).toEqual([60, 48]);
+  });
 });

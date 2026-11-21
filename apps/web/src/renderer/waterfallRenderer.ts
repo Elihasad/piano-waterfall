@@ -358,6 +358,27 @@ export function renderWaterfallFrame(
     ctx.globalAlpha = 1;
   }
 
+  // 6b. Subtle lead-in countdown pill (when song starts with 2–3s preparation buffer)
+  if (currentTimeSec < -0.05 && isPlaying) {
+    const remaining = Math.ceil(-currentTimeSec);
+    ctx.save();
+    const cx = width / 2;
+    const cy = Math.min(waterfallHeight * 0.42, waterfallHeight - 40);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.72)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.lineWidth = 1.5;
+    drawRoundedRect(ctx, cx - 34, cy - 26, 68, 52, 16);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.font = '700 28px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(remaining), cx, cy + 1);
+    ctx.restore();
+  }
+
   // 7. Key contact divider line
   ctx.fillStyle = '#09090d';
   ctx.fillRect(0, waterfallHeight, width, 3);

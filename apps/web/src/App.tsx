@@ -39,7 +39,11 @@ const LABEL_CYCLE: NoteLabelMode[] = ['letters', 'solfege', 'off'];
 
 export default function App() {
   const player = useMemo(() => new PianoSynth(), []);
-  const clock = useMemo(() => new PlaybackClock(player), [player]);
+  const clock = useMemo(() => {
+    const c = new PlaybackClock(player);
+    c.setLeadInSec(2.4);
+    return c;
+  }, [player]);
 
   const [activeView, setActiveView] = useState<AppView>('home');
   const [songs, setSongs] = useState<Song[]>(DEMO_SONGS);

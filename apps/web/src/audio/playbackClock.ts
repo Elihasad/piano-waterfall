@@ -37,21 +37,26 @@ export class PlaybackClock {
     left: { audio: true, visual: true },
     right: { audio: true, visual: true },
   };
-  private cursorTimeSec = -1;
-  private audioCursorSec = -1;
+  private cursorTimeSec: number | null = null;
+  private audioCursorSec: number | null = null;
+  private leadInSec = 0;
   private static readonly AUDIO_LOOKAHEAD_REAL_SEC = 1.6;
 
   constructor(player: NotePlayer) {
     this.player = player;
   }
 
+  setLeadInSec(sec: number): void {
+    this.leadInSec = Math.max(0, Math.min(5, sec));
+  }
+
   loadSong(song: Song): void {
     this.player.stopAll();
     this.song = song;
     this.isPlaying = false;
-    this.currentTimeSec = 0;
-    this.cursorTimeSec = -1;
-    this.audioCursorSec = -1;
+    this.currentTimeSec = -this.leadInSec;
+    this.cursorTimeSec = null;
+    this.audioCursorSec = null;
     this.lastMetronomeBeatIdx = -1;
     this.waitingMidis.clear();
     this.satisfiedWaitTimeSec = -1;
@@ -63,9 +68,9 @@ export class PlaybackClock {
   play(): void {
     if (!this.song) return;
     if (this.currentTimeSec >= this.song.durationSec) {
-      this.currentTimeSec = 0;
-      this.cursorTimeSec = -1;
-      this.audioCursorSec = -1;
+      this.currentTimeSec = -this.leadInSec;
+      this.cursorTimeSec = null;
+      this.audioCursorSec = null;
       this.satisfiedWaitTimeSec = -1;
     } else {
       this.audioCursorSec = this.currentTimeSec - 0.0001;
@@ -76,7 +81,7 @@ export class PlaybackClock {
 
   pause(): void {
     this.isPlaying = false;
-    this.audioCursorSec = -1;
+    this.audioCursorSec = null;
     this.player.stopAll();
   }
 
@@ -96,10 +101,10 @@ export class PlaybackClock {
       const { startSec } = this.getLoopBounds();
       this.currentTimeSec = startSec;
     } else {
-      this.currentTimeSec = 0;
+      this.currentTimeSec = -this.leadInSec;
     }
-    this.cursorTimeSec = -1;
-    this.audioCursorSec = -1;
+    this.cursorTimeSec = null;
+    this.audioCursorSec = null;
   }
 
   seek(timeSec: number): void {
@@ -289,7 +294,7 @@ export class PlaybackClock {
 
     const deltaSongSec = deltaRealSec * this.speedRatio;
     const prevTime = this.currentTimeSec;
-    const startWindow = this.cursorTimeSec < 0 ? prevTime : this.cursorTimeSec;
+    const startWindow = this.cursorTimeSec === null ? prevTime : this.cursorTimeSec;
     let nextTime = prevTime + deltaSongSec;
 
     if (this.practiceMode === 'wait') {
@@ -327,7 +332,7 @@ export class PlaybackClock {
       }
       if (nextTime >= endSec) {
         if (audioNow !== null && this.practiceMode === 'listen') {
-          const schedFrom = this.audioCursorSec < 0 ? startWindow : this.audioCursorSec;
+          const schedFrom = this.audioCursorSec === null ? startWindow : this.audioCursorSec;
           this.triggerNotesInWindow(schedFrom, endSec, nextTime, audioNow);
         } else {
           this.triggerNotesInWindow(startWindow, endSec);
@@ -348,10 +353,10 @@ export class PlaybackClock {
         return this.getSnapshot();
       }
       if (audioNow !== null && this.practiceMode === 'listen') {
-        const schedFrom = this.audioCursorSec < 0 ? startWindow : this.audioCursorSec;
+        const schedFrom = this.audioCursorSec === null ? startWindow : this.audioCursorSec;
         const schedTo = Math.min(endSec, nextTime + lookAheadSong);
         this.triggerNotesInWindow(schedFrom, schedTo, nextTime, audioNow);
-        this.audioCursorSec = Math.max(this.audioCursorSec, schedTo);
+        this.audioCursorSec = Math.max(this.audioCursorSec ?? schedFrom, schedTo);
         this.currentTimeSec = nextTime;
         this.cursorTimeSec = nextTime;
         return this.getSnapshot();
@@ -359,10 +364,10 @@ export class PlaybackClock {
     }
 
     if (audioNow !== null && this.practiceMode === 'listen') {
-      const schedFrom = this.audioCursorSec < 0 ? startWindow : this.audioCursorSec;
+      const schedFrom = this.audioCursorSec === null ? startWindow : this.audioCursorSec;
       const schedTo = Math.min(this.song.durationSec + 0.01, nextTime + lookAheadSong);
       this.triggerNotesInWindow(schedFrom, schedTo, nextTime, audioNow);
-      this.audioCursorSec = Math.max(this.audioCursorSec, schedTo);
+      this.audioCursorSec = Math.max(this.audioCursorSec ?? schedFrom, schedTo);
     } else {
       this.triggerNotesInWindow(startWindow, nextTime);
     }
@@ -380,7 +385,7 @@ export class PlaybackClock {
     if (nextTime >= this.song.durationSec) {
       this.currentTimeSec = this.song.durationSec;
       this.cursorTimeSec = this.song.durationSec;
-      this.audioCursorSec = -1;
+      this.audioCursorSec = null;
       this.isPlaying = false;
     } else {
       this.currentTimeSec = nextTime;
