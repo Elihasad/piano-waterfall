@@ -622,8 +622,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               </h1>
               <p className="text-sm text-slate-300 max-w-xl leading-relaxed">
                 {isVi
-                  ? 'Nhập hàng loạt MIDI / MusicXML / PDF hoặc mở tập ngay hơn 4.240 bản nhạc tích hợp sẵn đủ 20 thể loại — 100% offline.'
-                  : 'Batch-import MIDI, MusicXML, or PDF files, or instantly practice 4,240+ built-in offline scores across all 20 music genres.'}
+                  ? 'Nhập hàng loạt MIDI / MusicXML / PDF hoặc mở tập ngay hơn 5.120 bản nhạc tích hợp sẵn đủ 20 thể loại — 100% offline.'
+                  : 'Batch-import MIDI, MusicXML, or PDF files, or instantly practice 5,120+ built-in offline scores across all 20 music genres.'}
               </p>
             </div>
 
