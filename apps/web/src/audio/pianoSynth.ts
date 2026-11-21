@@ -1,3 +1,4 @@
+import { SplendidGrandPiano } from 'smplr';
 import { clampMidi } from '../core/noteNames';
 import type { SoundPreset } from '../core/types';
 
@@ -46,23 +47,39 @@ function midiToFrequency(midi: number): number {
   return 440 * Math.pow(2, (clampMidi(midi) - 69) / 12);
 }
 
-function createHallImpulse(ctx: AudioContext, durationSec = 2.0, decay = 2.6): AudioBuffer {
+/**
+ * Generate a warm, natural concert-hall stereo impulse response with progressive
+ * high-frequency air/wood damping (eliminates metallic white-noise hiss).
+ */
+function createHallImpulse(ctx: AudioContext, durationSec = 2.4, decay = 2.9): AudioBuffer {
   const rate = ctx.sampleRate;
   const length = Math.floor(rate * durationSec);
   const impulse = ctx.createBuffer(2, length, rate);
   for (let ch = 0; ch < 2; ch++) {
     const data = impulse.getChannelData(ch);
+    let lp1 = 0;
+    let lp2 = 0;
     for (let i = 0; i < length; i++) {
-      const env = Math.pow(1 - i / length, decay);
-      data[i] = (Math.random() * 2 - 1) * env;
+      const progress = i / length;
+      const env = Math.pow(1 - progress, decay);
+      // Slight pre-delay & early reflection warmth
+      const preDelayGain = i < rate * 0.014 ? i / (rate * 0.014) : 1;
+      const white = Math.random() * 2 - 1;
+      // Progressive lowpass: brighter early reflections, warmer tail
+      const alpha = Math.max(0.06, 0.34 * (1 - progress * 0.78));
+      lp1 += alpha * (white - lp1);
+      lp2 += alpha * (lp1 - lp2);
+      data[i] = lp2 * env * preDelayGain;
     }
   }
   return impulse;
 }
 
 /**
- * Offline studio-quality sampled piano engine powered by bundled Salamander Grand Piano
- * samples (CC-BY 3.0) with 4 selectable presets: Grand, Studio, Bright, and Electric Piano.
+ * Expressive Concert Piano engine combining:
+ * 1. `SplendidGrandPiano` (danigb/smplr — 4-velocity-layer Steinway Grand samples) when online
+ * 2. Bundled offline Salamander Grand Piano samples with velocity-sensitive felt lowpass,
+ *    stereo keyboard panning, register-aware damper release, and warm concert hall reverb.
  */
 export class PianoSynth implements NotePlayer {
   private ctx: AudioContext | null = null;
@@ -72,8 +89,12 @@ export class PianoSynth implements NotePlayer {
   private highShelf: BiquadFilterNode | null = null;
   private voices: ActiveVoice[] = [];
   private sampleBuffers = new Map<number, AudioBuffer>();
+  private splendidPiano: SplendidGrandPiano | null = null;
+  private splendidReady = false;
   private loadingStarted = false;
   private preset: SoundPreset = 'grand';
+  private lastChordTime = -1;
+  private chordNoteCount = 0;
 
   private ensureContext(): AudioContext | null {
     if (typeof window === 'undefined') return null;
@@ -121,8 +142,31 @@ export class PianoSynth implements NotePlayer {
       this.wetGain = wetGain;
       this.applyPresetRouting();
       void this.preloadSamples();
+      this.initSplendidGrand(ctx, lowShelf);
     }
     return this.ctx;
+  }
+
+  private initSplendidGrand(ctx: AudioContext, destination: AudioNode): void {
+    // Load multi-velocity Steinway Grand Piano from smplr in the background;
+    // falls back seamlessly to bundled offline Salamander samples while loading or offline.
+    try {
+      const piano = new SplendidGrandPiano(ctx, {
+        destination,
+        decayTime: 0.72,
+        volume: 105,
+      });
+      this.splendidPiano = piano;
+      void piano.load
+        .then(() => {
+          this.splendidReady = true;
+        })
+        .catch(() => {
+          this.splendidReady = false;
+        });
+    } catch {
+      this.splendidReady = false;
+    }
   }
 
   private applyPresetRouting(): void {
@@ -244,21 +288,50 @@ export class PianoSynth implements NotePlayer {
     }
 
     const clamped = clampMidi(midi);
-    const now = startAtAudioTime ?? ctx.currentTime;
-    const vel = Math.max(0.1, Math.min(1, velocity));
+    const baseNow = startAtAudioTime ?? ctx.currentTime;
+    const rawVel = Math.max(0.1, Math.min(1, velocity));
     const holdDur = Math.max(0.1, Math.min(durationSec, 8));
+
+    // Organic chord micro-spread (0..6ms) + subtle dynamic nuance so chords bloom like a human pianist
+    let humanOffset = 0;
+    if (Math.abs(baseNow - this.lastChordTime) < 0.008) {
+      this.chordNoteCount = Math.min(8, this.chordNoteCount + 1);
+      humanOffset = this.chordNoteCount * 0.0022 + Math.random() * 0.0018;
+    } else {
+      this.lastChordTime = baseNow;
+      this.chordNoteCount = 0;
+    }
+    const now = baseNow + humanOffset;
+    const expressiveVel = Math.max(
+      0.12,
+      Math.min(0.98, Math.pow(rawVel, 1.2) * (0.97 + Math.random() * 0.06)),
+    );
 
     // Electric Piano uses dedicated Rhodes-style FM/tine synthesis
     if (this.preset === 'electric') {
-      this.playElectricPiano(ctx, clamped, now, holdDur, vel);
+      this.playElectricPiano(ctx, clamped, now, holdDur, expressiveVel);
+      return;
+    }
+
+    // Prefer 4-velocity-layer Steinway Grand (smplr) when loaded for rich, non-mechanical acoustics
+    if (this.splendidReady && this.splendidPiano) {
+      const midiVel = Math.max(18, Math.min(127, Math.round(expressiveVel * 127)));
+      // Register-aware natural sustain tail
+      const registerTail = clamped < 52 ? 0.35 : clamped < 72 ? 0.18 : 0.08;
+      this.splendidPiano.start({
+        note: clamped,
+        velocity: midiVel,
+        time: now,
+        duration: holdDur + registerTail,
+      });
       return;
     }
 
     const sample = this.findClosestSample(clamped);
     if (sample) {
-      this.playSampledPiano(ctx, sample.buffer, sample.baseMidi, clamped, now, holdDur, vel);
+      this.playSampledPiano(ctx, sample.buffer, sample.baseMidi, clamped, now, holdDur, expressiveVel);
     } else {
-      this.playFallbackSynth(ctx, clamped, now, holdDur, vel);
+      this.playFallbackSynth(ctx, clamped, now, holdDur, expressiveVel);
     }
   }
 
@@ -276,19 +349,43 @@ export class PianoSynth implements NotePlayer {
     src.buffer = buffer;
     src.playbackRate.value = Math.pow(2, (targetMidi - baseMidi) / 12);
 
-    const releaseDur = this.preset === 'grand' ? 0.65 : this.preset === 'studio' ? 0.3 : 0.45;
+    // Register-aware natural damper release (bass rings longer, treble decays crisper)
+    const baseRelease = this.preset === 'grand' ? 0.85 : this.preset === 'studio' ? 0.42 : 0.6;
+    const registerFactor = targetMidi < 50 ? 1.35 : targetMidi > 78 ? 0.72 : 1.0;
+    const releaseDur = baseRelease * registerFactor;
     const endTime = now + holdDur + releaseDur;
 
+    // Velocity-sensitive felt hammer lowpass filter (soft notes = warm/dark, loud notes = bright)
+    const hammerFilter = ctx.createBiquadFilter();
+    hammerFilter.type = 'lowpass';
+    const peakCutoff = Math.min(16000, 1100 + Math.pow(vel, 1.8) * 13500);
+    const sustainCutoff = Math.max(850, peakCutoff * 0.52);
+    hammerFilter.frequency.setValueAtTime(peakCutoff, now);
+    hammerFilter.frequency.exponentialRampToValueAtTime(sustainCutoff, now + Math.min(holdDur, 1.2));
+
     const noteGain = ctx.createGain();
-    noteGain.gain.setValueAtTime(Math.max(0.0001, vel * 0.9), now);
-    noteGain.gain.setValueAtTime(Math.max(0.0001, vel * 0.85), now + holdDur);
+    // Smooth 3ms de-click attack + natural string decay curve
+    noteGain.gain.setValueAtTime(0.0001, now);
+    noteGain.gain.linearRampToValueAtTime(Math.max(0.001, vel * 0.92), now + 0.003);
+    noteGain.gain.exponentialRampToValueAtTime(Math.max(0.001, vel * 0.72), now + holdDur);
     noteGain.gain.exponentialRampToValueAtTime(0.0001, endTime);
 
-    src.connect(noteGain);
-    noteGain.connect(this.lowShelf);
+    src.connect(hammerFilter);
+    hammerFilter.connect(noteGain);
+
+    // Natural stereo piano keyboard panning (bass left -> treble right)
+    let panner: StereoPannerNode | null = null;
+    if (typeof ctx.createStereoPanner === 'function') {
+      panner = ctx.createStereoPanner();
+      panner.pan.value = Math.max(-0.38, Math.min(0.38, ((targetMidi - 60) / 36) * 0.35));
+      noteGain.connect(panner);
+      panner.connect(this.lowShelf);
+    } else {
+      noteGain.connect(this.lowShelf);
+    }
 
     src.start(now);
-    src.stop(endTime + 0.03);
+    src.stop(endTime + 0.04);
 
     const voice: ActiveVoice = {
       stop: () => {
@@ -302,8 +399,8 @@ export class PianoSynth implements NotePlayer {
             noteGain.gain.cancelScheduledValues(t);
             noteGain.gain.setValueAtTime(cur, t);
           }
-          noteGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
-          src.stop(t + 0.07);
+          noteGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.07);
+          src.stop(t + 0.08);
         } catch {
           // Already stopped
         }
@@ -314,7 +411,9 @@ export class PianoSynth implements NotePlayer {
     src.onended = () => {
       const idx = this.voices.indexOf(voice);
       if (idx >= 0) this.voices.splice(idx, 1);
+      hammerFilter.disconnect();
       noteGain.disconnect();
+      panner?.disconnect();
     };
   }
 
@@ -474,6 +573,11 @@ export class PianoSynth implements NotePlayer {
   }
 
   stopAll(): void {
+    try {
+      this.splendidPiano?.stop();
+    } catch {
+      // ignore
+    }
     const active = this.voices.splice(0);
     for (const v of active) {
       v.stop();
