@@ -3,9 +3,11 @@ import {
   BookOpen,
   GraduationCap,
   Library,
+  Moon,
   Piano,
   Settings,
   Sparkles,
+  Sun,
   Usb,
 } from 'lucide-react';
 import type { Language } from '../core/types';
@@ -15,9 +17,11 @@ export type AppView = 'player' | 'library' | 'arrange' | 'theory' | 'quiz';
 interface AppShellProps {
   activeView: AppView;
   language: Language;
+  darkTheme: boolean;
   midiDevices: string[];
   onNavigate: (view: AppView) => void;
   onToggleLanguage: () => void;
+  onToggleTheme: () => void;
   onOpenSettings: () => void;
   children: React.ReactNode;
 }
@@ -25,9 +29,11 @@ interface AppShellProps {
 export const AppShell: React.FC<AppShellProps> = ({
   activeView,
   language,
+  darkTheme,
   midiDevices,
   onNavigate,
   onToggleLanguage,
+  onToggleTheme,
   onOpenSettings,
   children,
 }) => {
@@ -69,7 +75,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                   Piano Waterfall
                 </div>
                 <div className="text-[10px] text-[#888d9c] font-medium mt-0.5">
-                  Studio · v1.3.7
+                  Studio · v1.3.8
                 </div>
               </div>
             </button>
@@ -136,14 +142,25 @@ export const AppShell: React.FC<AppShellProps> = ({
                 </button>
               </div>
 
-              <button
-                type="button"
-                onClick={onOpenSettings}
-                className="p-2 rounded-xl bg-[#f8f6f1] hover:bg-[#edeae2] border border-[#e7e3d9] text-[#4a4f5e]"
-                aria-label="Settings"
-              >
-                <Settings className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={onToggleTheme}
+                  className="p-2 rounded-xl bg-[#f8f6f1] hover:bg-[#edeae2] border border-[#e7e3d9] text-[#4a4f5e]"
+                  aria-label={darkTheme ? 'Switch to Soft Paper theme' : 'Switch to Dark Studio theme'}
+                  title={darkTheme ? (isVi ? 'Nền giấy dịu mắt' : 'Soft Paper') : (isVi ? 'Nền tối Studio' : 'Dark Studio')}
+                >
+                  {darkTheme ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={onOpenSettings}
+                  className="p-2 rounded-xl bg-[#f8f6f1] hover:bg-[#edeae2] border border-[#e7e3d9] text-[#4a4f5e]"
+                  aria-label="Settings"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
         </aside>

@@ -39,36 +39,79 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   const [query, setQuery] = useState('');
   const [formatFilter, setFormatFilter] = useState<'all' | SourceFormat>('all');
   const [error, setError] = useState<string | null>(null);
-  const [pdfProgress, setPdfProgress] = useState<{ currentPage: number; totalPages: number } | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [importStatus, setImportStatus] = useState<{
+    fileIndex: number;
+    totalFiles: number;
+    fileName: string;
+    currentPage?: number;
+    totalPages?: number;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files ?? []);
     e.target.value = '';
-    if (!file) return;
+    if (files.length === 0) return;
 
     setError(null);
+    setSuccessMsg(null);
     setBusy(true);
+
+    const importedSongs: Song[] = [];
+    const failedMessages: string[] = [];
+
     try {
-      if (file.name.toLowerCase().endsWith('.pdf')) {
-        setPdfProgress({ currentPage: 1, totalPages: 1 });
-        const song = await parsePdfOffline(file, (p) => setPdfProgress(p));
-        await onImportSong(song);
-        onSelectSong(song);
-      } else {
-        const song = await parseSongFile(file);
-        await onImportSong(song);
-        onSelectSong(song);
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        setImportStatus({
+          fileIndex: i + 1,
+          totalFiles: files.length,
+          fileName: file.name,
+        });
+        try {
+          let song: Song;
+          if (file.name.toLowerCase().endsWith('.pdf')) {
+            song = await parsePdfOffline(file, (p) =>
+              setImportStatus({
+                fileIndex: i + 1,
+                totalFiles: files.length,
+                fileName: file.name,
+                currentPage: p.currentPage,
+                totalPages: p.totalPages,
+              }),
+            );
+          } else {
+            song = await parseSongFile(file);
+          }
+          await onImportSong(song);
+          importedSongs.push(song);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Failed to import.';
+          if (msg.includes('dynamically imported module')) {
+            failedMessages.push(
+              `${file.name}: A new version was deployed. Please refresh (F5) and try again.`,
+            );
+          } else {
+            failedMessages.push(`${file.name}: ${msg}`);
+          }
+        }
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to import sheet music.';
-      if (msg.includes('dynamically imported module')) {
-        setError('A new version was deployed. Please refresh the page (F5) and try again.');
-      } else {
-        setError(msg);
+
+      if (importedSongs.length === 1 && files.length === 1) {
+        onSelectSong(importedSongs[0]);
+      } else if (importedSongs.length > 0) {
+        setSuccessMsg(
+          isVi
+            ? `Đã nhập thành công ${importedSongs.length}/${files.length} bản nhạc vào thư viện!`
+            : `Successfully imported ${importedSongs.length} of ${files.length} scores!`,
+        );
+      }
+      if (failedMessages.length > 0) {
+        setError(failedMessages.join(' · '));
       }
     } finally {
-      setPdfProgress(null);
+      setImportStatus(null);
       setBusy(false);
     }
   };
@@ -110,11 +153,12 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               </p>
             </div>
 
-            <label className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full bg-white hover:bg-slate-100 text-[#14151c] font-semibold text-sm cursor-pointer shadow-md transition shrink-0">
+            <label className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full bg-[#f0ece3] hover:bg-[#e5e0d5] text-[#14151c] font-semibold text-sm cursor-pointer shadow-md transition shrink-0">
               <Upload className="w-4 h-4 text-[#4f46e5]" />
-              <span>{isVi ? 'Nhập bản nhạc' : 'Import a score'}</span>
+              <span>{isVi ? 'Nhập nhiều bản nhạc' : 'Import scores'}</span>
               <input
                 type="file"
+                multiple
                 aria-label={t(language, 'uploadLabel')}
                 accept=".musicxml,.xml,.mxl,.mid,.midi,.pdf,*/*"
                 disabled={busy}
@@ -141,24 +185,35 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
           </div>
         </div>
 
-        {/* Progress / Error banners */}
-        {pdfProgress && (
+        {/* Progress / Success / Error banners */}
+        {importStatus && (
           <div className="paper-card rounded-2xl p-3.5 space-y-2">
-            <div className="flex items-center gap-2 text-xs font-semibold text-[#4f46e5]">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              <span>
-                {t(language, 'pdfOfflineReading')}: {t(language, 'pdfPageProgress')}{' '}
-                {pdfProgress.currentPage}/{pdfProgress.totalPages}...
+            <div className="flex items-center justify-between gap-2 text-xs font-semibold text-[#4f46e5]">
+              <span className="flex items-center gap-2 truncate">
+                <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                <span className="truncate">
+                  {isVi ? 'Đang nhập' : 'Importing'} {importStatus.fileIndex}/{importStatus.totalFiles}:{' '}
+                  {importStatus.fileName}
+                  {importStatus.totalPages
+                    ? ` (${t(language, 'pdfPageProgress')} ${importStatus.currentPage}/${importStatus.totalPages})`
+                    : ''}
+                </span>
               </span>
             </div>
-            <div className="w-full h-1.5 rounded-full bg-[#e7e3d9] overflow-hidden">
+            <div className="w-full h-1.5 rounded-full bg-[#d6d0c4] overflow-hidden">
               <div
                 className="h-full bg-[#4f46e5] transition-all"
                 style={{
-                  width: `${Math.min(100, Math.round((pdfProgress.currentPage / Math.max(1, pdfProgress.totalPages)) * 100))}%`,
+                  width: `${Math.min(100, Math.round((importStatus.fileIndex / Math.max(1, importStatus.totalFiles)) * 100))}%`,
                 }}
               />
             </div>
+          </div>
+        )}
+
+        {successMsg && (
+          <div className="rounded-2xl bg-[#e1f4ea] border border-[#2f9e6c]/40 p-3 text-xs font-semibold text-[#1e6f4a]">
+            ✓ {successMsg}
           </div>
         )}
 

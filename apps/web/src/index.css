@@ -3,14 +3,15 @@
 @tailwind utilities;
 
 :root {
-  --color-paper: #f8f6f1;
-  --color-surface: #ffffff;
-  --color-line: #e7e3d9;
-  --color-ink: #14151c;
-  --color-ink-soft: #4a4f5e;
-  --color-ink-mute: #888d9c;
+  /* Soft, low-glare warm matte parchment palette (easier on eyes than pure white) */
+  --color-paper: #e4dfd4;
+  --color-surface: #eeebe3;
+  --color-line: #d3cdc0;
+  --color-ink: #171923;
+  --color-ink-soft: #474c5c;
+  --color-ink-mute: #767b8a;
   --color-accent: #4f46e5;
-  --color-accent-soft: #eceefe;
+  --color-accent-soft: #e2e4f8;
   --color-violet: #7c3aed;
   --color-rh: #7a93ff;
   --color-lh: #34b8a2;
@@ -30,6 +31,48 @@ body,
   overscroll-behavior: none;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+}
+
+/* Soften utility paper/white classes globally so nothing feels glaring bright */
+.bg-\[\#f8f6f1\] {
+  background-color: var(--color-paper) !important;
+}
+.bg-white {
+  background-color: var(--color-surface) !important;
+}
+.border-\[\#e7e3d9\] {
+  border-color: var(--color-line) !important;
+}
+
+/* Optional 1-click Dark Studio Mode (html.theme-dark) */
+html.theme-dark {
+  --color-paper: #12141e;
+  --color-surface: #1b1e2c;
+  --color-line: #2a2e42;
+  --color-ink: #ebe8e0;
+  --color-ink-soft: #a4a9ba;
+  --color-ink-mute: #7a8096;
+}
+
+html.theme-dark .paper-card {
+  background-color: #1b1e2c;
+  border-color: #2a2e42;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+
+html.theme-dark .text-\[\#14151c\] {
+  color: #ebe8e0 !important;
+}
+html.theme-dark .text-\[\#4a4f5e\] {
+  color: #a4a9ba !important;
+}
+html.theme-dark .bg-\[\#faf8f4\],
+html.theme-dark .bg-\[\#f3f0e8\],
+html.theme-dark .bg-\[\#edeae2\] {
+  background-color: #232738 !important;
+}
+html.theme-dark .bg-\[\#eceefe\] {
+  background-color: rgba(79, 70, 229, 0.25) !important;
 }
 
 .display-serif {
@@ -77,9 +120,9 @@ body,
 }
 
 .paper-card {
-  background-color: #ffffff;
-  border: 1px solid #e7e3d9;
-  box-shadow: 0 1px 2px rgba(20, 21, 28, 0.04), 0 8px 24px -12px rgba(20, 21, 28, 0.12);
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-line);
+  box-shadow: 0 1px 2px rgba(20, 21, 28, 0.05), 0 8px 24px -12px rgba(20, 21, 28, 0.14);
 }
 
 .no-scrollbar::-webkit-scrollbar {

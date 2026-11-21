@@ -24,6 +24,8 @@ import {
   Compass,
   GraduationCap,
   Bell,
+  Moon,
+  Sun,
 } from 'lucide-react';
 import { t } from '../core/i18n';
 import { midiToNoteLabel } from '../core/noteNames';
@@ -55,6 +57,7 @@ interface TopBarProps {
   noteLabelMode: NoteLabelMode;
   effectsEnabled: boolean;
   fullKeyboard: boolean;
+  darkTheme?: boolean;
   isAccompanimentActive?: boolean;
   onTogglePlay: () => void;
   onRestart: () => void;
@@ -69,6 +72,7 @@ interface TopBarProps {
   onCycleNoteLabelMode: () => void;
   onToggleEffects: () => void;
   onToggleFullKeyboard: () => void;
+  onToggleTheme?: () => void;
   onToggleMetronome?: () => void;
   onOpenPracticePath?: () => void;
   onOpenAccompaniment?: () => void;
@@ -104,6 +108,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   noteLabelMode,
   effectsEnabled,
   fullKeyboard,
+  darkTheme = false,
   isAccompanimentActive = false,
   onTogglePlay,
   onRestart,
@@ -118,6 +123,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onCycleNoteLabelMode,
   onToggleEffects,
   onToggleFullKeyboard,
+  onToggleTheme,
   onToggleMetronome,
   onOpenPracticePath,
   onOpenAccompaniment,
@@ -432,6 +438,19 @@ export const TopBar: React.FC<TopBarProps> = ({
           {fullKeyboard ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
           <span>{fullKeyboard ? t(language, 'full88') : t(language, 'autoZoom')}</span>
         </button>
+
+        {/* Dark / Soft Paper Theme Toggle */}
+        {onToggleTheme && (
+          <button
+            type="button"
+            onClick={onToggleTheme}
+            aria-label={darkTheme ? 'Soft Paper Theme' : 'Dark Studio Theme'}
+            className="w-9 h-9 flex items-center justify-center rounded-full bg-[#f8f6f1] hover:bg-[#edeae2] border border-[#e7e3d9] text-[#4a4f5e] shrink-0"
+            title={darkTheme ? (language === 'vi' ? 'Nền giấy dịu mắt' : 'Soft Paper') : (language === 'vi' ? 'Nền tối Studio' : 'Dark Studio')}
+          >
+            {darkTheme ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
+          </button>
+        )}
 
         {/* Settings */}
         <button

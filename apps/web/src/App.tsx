@@ -53,8 +53,25 @@ export default function App() {
     return loaded;
   });
   const [fullKeyboard, setFullKeyboard] = useState(false);
+  const [darkTheme, setDarkTheme] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('pw-theme') === 'dark';
+    } catch {
+      return false;
+    }
+  });
   const [showPracticePath, setShowPracticePath] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.classList.toggle('theme-dark', darkTheme);
+    try {
+      localStorage.setItem('pw-theme', darkTheme ? 'dark' : 'paper');
+    } catch {
+      // ignore
+    }
+  }, [darkTheme]);
   const [isPortraitMobile, setIsPortraitMobile] = useState(false);
   const [midiState, setMidiState] = useState<MidiDeviceState>({
     supported: false,
@@ -332,6 +349,7 @@ export default function App() {
     <AppShell
       activeView={activeView}
       language={settings.language}
+      darkTheme={darkTheme}
       midiDevices={midiState.connectedNames}
       onNavigate={(view) => {
         if (view !== 'player' && snapshot.isPlaying) {
@@ -343,6 +361,7 @@ export default function App() {
       onToggleLanguage={() =>
         handleUpdateSettings({ language: settings.language === 'en' ? 'vi' : 'en' })
       }
+      onToggleTheme={() => setDarkTheme((d) => !d)}
       onOpenSettings={() => setShowSettings(true)}
     >
       {activeView === 'player' && (
@@ -366,6 +385,7 @@ export default function App() {
             noteLabelMode={settings.noteLabelMode}
             effectsEnabled={settings.effectsEnabled}
             fullKeyboard={fullKeyboard}
+            darkTheme={darkTheme}
             isAccompanimentActive={Boolean(accompanimentSong)}
             onTogglePlay={handleTogglePlay}
             onRestart={handleRestart}
@@ -382,6 +402,7 @@ export default function App() {
               handleUpdateSettings({ effectsEnabled: !settings.effectsEnabled })
             }
             onToggleFullKeyboard={() => setFullKeyboard((v) => !v)}
+            onToggleTheme={() => setDarkTheme((d) => !d)}
             onToggleMetronome={handleToggleMetronome}
             onOpenPracticePath={() => setShowPracticePath(true)}
             onOpenAccompaniment={() => setActiveView('arrange')}
