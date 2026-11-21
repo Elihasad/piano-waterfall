@@ -193,10 +193,14 @@ export default function App() {
       const next = songs.filter((s) => s.id !== id);
       setSongs(next);
       if (originalSong.id === id && next.length > 0) {
-        selectSong(next[0]);
+        // Silently switch active song in background without leaving the Library view
+        setOriginalSong(next[0]);
+        setAccompanimentSong(null);
+        clock.loadSong(next[0]);
+        setSnapshot(clock.getSnapshot());
       }
     },
-    [songs, originalSong.id, selectSong],
+    [songs, originalSong.id, clock],
   );
 
   const handleUpdateSettings = useCallback(
