@@ -524,6 +524,7 @@ export default function App() {
           language={settings.language}
           player={player}
           detectedKey={liveHarmony.key}
+          onStartLessonSong={selectSong}
         />
       )}
 
