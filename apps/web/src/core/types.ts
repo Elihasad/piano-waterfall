@@ -69,6 +69,7 @@ export type AccompanimentStyleId =
   | 'ballad-arpeggio'
   | 'pop-groove'
   | 'slow-rock-68'
+  | 'waltz-34'
   | 'bolero'
   | 'bossa-nova'
   | 'jazz-swing'

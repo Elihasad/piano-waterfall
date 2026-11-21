@@ -77,6 +77,17 @@ export const ACCOMPANIMENT_STYLES: ReadonlyArray<AccompanimentStyleMeta> = [
     beatType: 4,
   },
   {
+    id: 'waltz-34',
+    genre: 'ballad-pop',
+    nameEn: 'Waltz / Valse (3/4)',
+    nameVi: 'Waltz / Valse (Nhịp 3/4)',
+    descEn: 'Classic 3/4 Boom–Chack–Chack accompaniment',
+    descVi: 'Điệu Valse 3/4 cổ điển: Bùm (phách 1) – Chát (2) – Chát (3)',
+    suggestedBpm: 108,
+    beatsPerMeasure: 3,
+    beatType: 4,
+  },
+  {
     id: 'jazz-swing',
     genre: 'jazz',
     nameEn: 'Jazz Swing (Walking Bass)',
@@ -439,6 +450,18 @@ export function generateAccompanimentSong(options: {
         // Subtle RH chord anchor on beat 1
         for (const m of rhVoicing) {
           pushNote(m, mStart, 1.3, 0.66, 'right', mNum);
+        }
+        break;
+      }
+
+      case 'waltz-34': {
+        // Classic 3/4 Waltz: Beat 1 Bass, Beat 2 RH chord, Beat 3 RH chord (softer)
+        pushNote(bassRoot, mStart, 1.4, 0.8, 'left', mNum);
+        pushNote(fifthMidi, mStart + 1.0 * secPerBeat, 0.85, 0.56, 'left', mNum);
+        pushNote(octaveMidi, mStart + 2.0 * secPerBeat, 0.85, 0.54, 'left', mNum);
+        for (const m of rhVoicing) {
+          pushNote(m, mStart + 1.0 * secPerBeat, 0.85, 0.74, 'right', mNum);
+          pushNote(m, mStart + 2.0 * secPerBeat, 0.85, 0.66, 'right', mNum);
         }
         break;
       }

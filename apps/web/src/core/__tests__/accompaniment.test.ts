@@ -64,10 +64,13 @@ describe('Accompaniment & Harmony Analyzer', () => {
     expect(chords.map((c) => c.symbol)).toEqual(['C', 'G', 'Am', 'F']);
   });
 
-  it('parses custom Jazz & slash chord strings accurately', () => {
+  it('parses custom Jazz, slash chords, and bracketed [Chord]Lyric sheets accurately', () => {
     const chords = parseChordProgressionText('Dm7 | G7 | Cmaj7 | C/E', 100);
     expect(chords.map((c) => c.symbol)).toEqual(['Dm7', 'G7', 'Cmaj7', 'C/E']);
     expect(chords[3].bassPc).toBe(4); // E bass
+
+    const fromLyrics = parseChordProgressionText('[Am]Mưa buồn rơi [Dm]trên phố [E7]cũ [Am]', 84);
+    expect(fromLyrics.map((c) => c.symbol)).toEqual(['Am', 'Dm', 'E7', 'Am']);
   });
 
   it('generates playable 2-hand songs for all 10 styles including Jazz Swing, Jazz Ballad, Lo-Fi, Bossa, Bolero, and Scale Drill', () => {

@@ -301,17 +301,22 @@ const NOTE_LETTER_TO_PC: Record<string, number> = {
 };
 
 /**
- * Parse a user-typed chord progression string like "C | G | Am7 | Fmaj7" or "Dm7 G7 Cmaj7".
+ * Parse a user-typed chord progression string like "C | G | Am7 | Fmaj7",
+ * "Dm7 G7 Cmaj7", OR bracketed chord-and-lyric sheets like "[Am]Mưa buồn [Dm]rơi [E7]mãi [Am]".
  */
 export function parseChordProgressionText(
   text: string,
   bpm = 90,
   beatsPerMeasure = 4,
 ): ChordEvent[] {
-  const tokens = text
-    .split(/[\s|,;]+/)
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const bracketMatches = [...text.matchAll(/\[([^\]]+)\]/g)].map((m) => m[1].trim());
+  const tokens =
+    bracketMatches.length > 0
+      ? bracketMatches
+      : text
+          .split(/[\s|,;]+/)
+          .map((s) => s.trim())
+          .filter(Boolean);
   const secPerMeasure = (60 / Math.max(30, bpm)) * beatsPerMeasure;
   const result: ChordEvent[] = [];
 

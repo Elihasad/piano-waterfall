@@ -14,12 +14,14 @@ import {
   parseChordProgressionText,
   PC_NAMES_SHARP,
 } from '../core/accompaniment/harmonyAnalyzer';
+import type { NotePlayer } from '../audio/pianoSynth';
 import type { AccompanimentStyleId, Language, Song } from '../core/types';
 import { TheoryGuideTab } from './TheoryGuideTab';
 
 interface AccompanimentModalProps {
   language: Language;
   originalSong: Song;
+  player?: NotePlayer;
   isAccompanimentActive: boolean;
   activeStyleId: AccompanimentStyleId;
   initialTab?: 'practice' | 'theory';
@@ -38,6 +40,7 @@ const GENRE_TABS: ReadonlyArray<{ id: StyleGenre; labelVi: string; labelEn: stri
 export const AccompanimentModal: React.FC<AccompanimentModalProps> = ({
   language,
   originalSong,
+  player,
   isAccompanimentActive,
   activeStyleId,
   initialTab = 'practice',
@@ -195,6 +198,7 @@ export const AccompanimentModal: React.FC<AccompanimentModalProps> = ({
           {mainTab === 'theory' ? (
             <TheoryGuideTab
               language={language}
+              player={player}
               initialTonicPc={harmony.key.tonicPc}
               initialMode={harmony.key.mode}
             />
@@ -359,14 +363,14 @@ export const AccompanimentModal: React.FC<AccompanimentModalProps> = ({
               <div className="rounded-xl bg-[#14151c] border border-[#262836] p-2.5 space-y-1.5">
                 <label className="text-[11px] text-slate-400 block">
                   {isVi
-                    ? 'Nhập vòng hợp âm (cách nhau bởi dấu cách hoặc | , vd: Dm7 | G7 | Cmaj7 | Am7):'
-                    : 'Enter chords separated by spaces or | (e.g. Dm7 | G7 | Cmaj7 | Am7):'}
+                    ? 'Nhập vòng hợp âm (vd: Dm7 | G7 | Cmaj7 | Am7) HOẶC dán thẳng lời kèm hợp âm dạng [Am]Mưa buồn [Dm]rơi [E7]mãi [Am]:'
+                    : 'Enter chords (e.g. Dm7 | G7 | Cmaj7 | Am7) OR paste bracketed [Chord]Lyrics like [Am]Rainy [Dm]days [E7]here [Am]:'}
                 </label>
-                <input
-                  type="text"
+                <textarea
+                  rows={2}
                   value={customChordsText}
                   onChange={(e) => setCustomChordsText(e.target.value)}
-                  className="w-full rounded-lg bg-[#121216] border border-[#2c2e3b] px-3 py-2 text-slate-100 font-mono text-xs"
+                  className="w-full rounded-lg bg-[#121216] border border-[#2c2e3b] px-3 py-2 text-slate-100 font-mono text-xs resize-none"
                 />
               </div>
             )}

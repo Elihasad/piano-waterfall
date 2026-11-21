@@ -387,6 +387,7 @@ export default function App() {
         <AccompanimentModal
           language={settings.language}
           originalSong={originalSong}
+          player={player}
           isAccompanimentActive={Boolean(accompanimentSong)}
           activeStyleId={activeStyleId}
           initialTab={accompanimentTab}
