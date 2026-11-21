@@ -2,6 +2,7 @@ import React from 'react';
 import {
   BookOpen,
   GraduationCap,
+  Home,
   Library,
   Moon,
   Piano,
@@ -12,7 +13,7 @@ import {
 } from 'lucide-react';
 import type { Language } from '../core/types';
 
-export type AppView = 'player' | 'library' | 'arrange' | 'theory' | 'quiz';
+export type AppView = 'home' | 'player' | 'library' | 'arrange' | 'theory' | 'quiz';
 
 interface AppShellProps {
   activeView: AppView;
@@ -45,6 +46,7 @@ export const AppShell: React.FC<AppShellProps> = ({
     labelEn: string;
     icon: React.ReactNode;
   }> = [
+    { id: 'home', labelVi: 'Trang Chủ', labelEn: 'Home', icon: <Home className="w-4 h-4" /> },
     { id: 'player', labelVi: 'Phòng Tập', labelEn: 'Player', icon: <Piano className="w-4 h-4" /> },
     { id: 'library', labelVi: 'Thư Viện', labelEn: 'Library', icon: <Library className="w-4 h-4" /> },
     { id: 'arrange', labelVi: 'Đệm Hát', labelEn: 'Arrange', icon: <Sparkles className="w-4 h-4" /> },
@@ -64,7 +66,7 @@ export const AppShell: React.FC<AppShellProps> = ({
             {/* Brand */}
             <button
               type="button"
-              onClick={() => onNavigate('player')}
+              onClick={() => onNavigate('home')}
               className="flex items-center gap-2.5 text-left group"
             >
               <div className="w-9 h-9 rounded-xl bg-[#14151c] flex items-center justify-center shadow-sm">
@@ -75,7 +77,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                   Piano Waterfall
                 </div>
                 <div className="text-[10px] text-[#888d9c] font-medium mt-0.5">
-                  Studio · v1.3.8
+                  Studio · v1.3.9
                 </div>
               </div>
             </button>

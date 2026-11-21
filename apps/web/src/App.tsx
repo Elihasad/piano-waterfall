@@ -6,6 +6,7 @@ import { PlaybackClock, type PlaybackSnapshot } from './audio/playbackClock';
 import { AppShell, type AppView } from './components/AppShell';
 import { ArrangeView } from './components/ArrangeView';
 import { ChordRibbon } from './components/ChordRibbon';
+import { HomeView } from './components/HomeView';
 import { LibraryView } from './components/LibraryView';
 import { NoteQuizView } from './components/NoteQuizView';
 import { PianoStage } from './components/PianoStage';
@@ -40,7 +41,7 @@ export default function App() {
   const player = useMemo(() => new PianoSynth(), []);
   const clock = useMemo(() => new PlaybackClock(player), [player]);
 
-  const [activeView, setActiveView] = useState<AppView>('player');
+  const [activeView, setActiveView] = useState<AppView>('home');
   const [songs, setSongs] = useState<Song[]>(DEMO_SONGS);
   const [originalSong, setOriginalSong] = useState<Song>(DEMO_SONGS[0]);
   const [accompanimentSong, setAccompanimentSong] = useState<Song | null>(null);
@@ -364,6 +365,23 @@ export default function App() {
       onToggleTheme={() => setDarkTheme((d) => !d)}
       onOpenSettings={() => setShowSettings(true)}
     >
+      {activeView === 'home' && (
+        <HomeView
+          language={settings.language}
+          songs={songs}
+          currentSong={currentSong}
+          onNavigate={setActiveView}
+          onSelectSong={selectSong}
+          onArrangeSong={(song) => {
+            setOriginalSong(song);
+            setAccompanimentSong(null);
+            clock.loadSong(song);
+            setSnapshot(clock.getSnapshot());
+            setActiveView('arrange');
+          }}
+        />
+      )}
+
       {activeView === 'player' && (
         <div className="flex flex-col w-full h-full bg-[#0c0e16]">
           <TopBar
@@ -408,6 +426,13 @@ export default function App() {
             onOpenAccompaniment={() => setActiveView('arrange')}
             onOpenTheory={() => setActiveView('theory')}
             onOpenQuiz={() => setActiveView('quiz')}
+            onOpenHome={() => {
+              if (snapshot.isPlaying) {
+                clock.pause();
+                setSnapshot(clock.getSnapshot());
+              }
+              setActiveView('home');
+            }}
             onOpenLibrary={() => setActiveView('library')}
             onOpenSettings={() => setShowSettings(true)}
           />

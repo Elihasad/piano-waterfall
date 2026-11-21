@@ -26,6 +26,7 @@ import {
   Bell,
   Moon,
   Sun,
+  Home,
 } from 'lucide-react';
 import { t } from '../core/i18n';
 import { midiToNoteLabel } from '../core/noteNames';
@@ -78,6 +79,7 @@ interface TopBarProps {
   onOpenAccompaniment?: () => void;
   onOpenTheory?: () => void;
   onOpenQuiz?: () => void;
+  onOpenHome?: () => void;
   onOpenLibrary: () => void;
   onOpenSettings: () => void;
 }
@@ -129,6 +131,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onOpenAccompaniment,
   onOpenTheory,
   onOpenQuiz,
+  onOpenHome,
   onOpenLibrary,
   onOpenSettings,
 }) => {
@@ -163,6 +166,19 @@ export const TopBar: React.FC<TopBarProps> = ({
     <header className="relative z-20 bg-white border-b border-[#e7e3d9] px-2.5 pt-2 pb-1.5 select-none text-[#14151c]">
       {/* Row 1: MuseKey Warm-Paper Studio Transport + Controls */}
       <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1.5">
+        {/* Back to Home */}
+        {onOpenHome && (
+          <button
+            type="button"
+            onClick={onOpenHome}
+            aria-label={language === 'vi' ? 'Trang chủ' : 'Home'}
+            title={language === 'vi' ? 'Trang chủ' : 'Home'}
+            className="w-9 h-9 flex items-center justify-center rounded-full bg-[#f8f6f1] hover:bg-[#edeae2] border border-[#e7e3d9] text-[#4a4f5e] shrink-0 transition"
+          >
+            <Home className="w-4 h-4" />
+          </button>
+        )}
+
         {/* Library & Song title */}
         <button
           type="button"

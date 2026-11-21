@@ -10,13 +10,16 @@ describe('App integration', () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
   });
 
-  it('defaults to English, cycles note labels, toggles MIDI wait mode, sound preset, hands, and library', async () => {
+  it('defaults to English Home dashboard, enters Player, cycles note labels, toggles MIDI wait mode, sound preset, hands, and library', async () => {
     render(<App />);
 
-    // Demo song loads automatically
+    // Home dashboard loads automatically with demo song ready to practice
     await waitFor(() => {
-      expect(screen.getByText(/Ode to Joy/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/Ode to Joy/i).length).toBeGreaterThan(0);
     });
+
+    // Navigate from Home to Player
+    fireEvent.click(screen.getByRole('button', { name: /Continue:/i }));
 
     // Cycle Note Labels: C D E -> Do Re -> Off
     const labelBtn = screen.getByRole('button', { name: /Note Labels/i });
