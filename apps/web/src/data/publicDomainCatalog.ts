@@ -1,10 +1,76 @@
 import type { DifficultyTier, PianoGrade } from '../core/types';
 
+export const MUSESCORE_GENRES = [
+  'Classical',
+  'Soundtrack',
+  'Pop',
+  'Rock',
+  'Religious Music',
+  'Folk',
+  'Jazz',
+  'World Music',
+  'Country',
+  'Reggae & Ska',
+  'R&B, Funk & Soul',
+  'Electronic',
+  'Hip Hop',
+  'Experimental',
+  'New Age',
+  'Blues',
+  'Metal',
+  'Comedy',
+  'Disco',
+  'Darkwave',
+] as const;
+
+export type MusicGenre = (typeof MUSESCORE_GENRES)[number];
+
+export function inferMusicGenre(title: string, composer = '', era = ''): MusicGenre {
+  const t = title.toLowerCase();
+  const text = `${t} ${composer.toLowerCase()}`;
+  const e = era.toLowerCase();
+
+  if (/\b(requiem|lacrimosa|ave maria|mass|kyrie|gloria|sanctus|agnus|hymn|carol|sacred|psalm|jesu|magnificat|alleluia|messiah|stabat|christmas|noel|silent night|o holy|amazing grace|gospel|chorale)\b/.test(text)) {
+    return 'Religious Music';
+  }
+  if (e === 'ragtime' || /\b(rag|ragtime|joplin|jazz|swing|bebop|bossa|charleston|boogie)\b/.test(text)) {
+    return 'Jazz';
+  }
+  if (/\b(blues)\b/.test(text)) return 'Blues';
+  if (/\b(soundtrack|ost|theme from|spirited away|howl|totoro|ghibli|hisaishi|zimmer|interstellar|inception|pirates|harry potter|star wars|titanic|jurassic|zelda|mario|final fantasy|undertale|minecraft|anime|movie|film|cinema|game)\b/.test(text)) {
+    return 'Soundtrack';
+  }
+  if (/\b(metal|metallica|iron maiden|slayer|megadeth|heavy metal)\b/.test(text)) return 'Metal';
+  if (/\b(rock|queen|pink floyd|nirvana|linkin park|coldplay|ac\/dc|led zeppelin|bon jovi)\b/.test(text)) return 'Rock';
+  if (/\b(hip hop|hip-hop|rap|eminem|drake|kendrick)\b/.test(text)) return 'Hip Hop';
+  if (/\b(electronic|edm|synth|techno|trance|dubstep|house|avicii|daft punk|alan walker)\b/.test(text)) return 'Electronic';
+  if (/\b(r&b|rnb|funk|soul|motown|stevie wonder|aretha)\b/.test(text)) return 'R&B, Funk & Soul';
+  if (/\b(reggae|ska|bob marley)\b/.test(text)) return 'Reggae & Ska';
+  if (/\b(country|johnny cash|bluegrass|nashville)\b/.test(text)) return 'Country';
+  if (/\b(disco|bee gees|abba)\b/.test(text)) return 'Disco';
+  if (/\b(darkwave|goth|synthwave)\b/.test(text)) return 'Darkwave';
+  if (/\b(comedy|parody|funny|meme)\b/.test(text)) return 'Comedy';
+  if (/\b(experimental|avant-garde|atonal)\b/.test(text)) return 'Experimental';
+  if (/\b(yiruma|einaudi|river flows|kiss the rain|nuvole bianche|new age|meditation|relaxing|ambient)\b/.test(text)) {
+    return 'New Age';
+  }
+  if (/\b(happy birthday|pop|beatles|adele|taylor swift|ed sheeran|elton john|disney|frozen|let it go|ballad)\b/.test(text)) {
+    return 'Pop';
+  }
+  if (/\b(hungarian|turkish|spanish|espana|bolero|tarantella|habanera|celtic|scottish|irish|slavonic|gypsy|oriental|arabesque|chinese|japanese|russian|korean|vietnam|tango|flamenco|polka)\b/.test(t)) {
+    return 'World Music';
+  }
+  if (e === 'traditional' || /\b(folk|traditional|greensleeves|reel|jig|hornpipe|morris|ashover|lullaby|shanty)\b/.test(text)) {
+    return 'Folk';
+  }
+  return 'Classical';
+}
+
 export interface PublicDomainCatalogEntry {
   id: string;
   title: string;
   composer: string;
-  source?: string;
+  genre: MusicGenre;
   bundled?: boolean;
   era: 'Baroque' | 'Classical' | 'Romantic' | 'Impressionist' | 'Ragtime' | 'Traditional';
   difficulty: DifficultyTier;
@@ -22,7 +88,8 @@ interface CompactCatalogRow {
   id: string;
   t: string;
   c: string;
-  s: string;
+  s?: string;
+  gr?: MusicGenre;
   b?: number;
   e: PublicDomainCatalogEntry['era'];
   d: DifficultyTier;
@@ -36,8 +103,8 @@ interface CompactCatalogRow {
 let cachedFullCatalog: PublicDomainCatalogEntry[] | null = null;
 
 /**
- * Lazily loads the deduplicated 3,190+ Public Domain Piano MusicXML/MIDI catalog index
- * from `./catalog/public-domain-catalog.json` (with 507 full scores bundled directly in `./scores/`).
+ * Lazily loads the deduplicated 3,190 Public Domain Piano MusicXML/MIDI catalog index
+ * from `./catalog/public-domain-catalog.json` (100% bundled locally in `./scores/`).
  */
 export async function loadFullPublicDomainCatalog(): Promise<PublicDomainCatalogEntry[]> {
   if (cachedFullCatalog) return cachedFullCatalog;
@@ -49,7 +116,7 @@ export async function loadFullPublicDomainCatalog(): Promise<PublicDomainCatalog
       id: r.id,
       title: r.t,
       composer: r.c,
-      source: r.s,
+      genre: r.gr ?? inferMusicGenre(r.t, r.c, r.e),
       bundled: r.b === 1,
       era: r.e,
       difficulty: r.d,
@@ -93,6 +160,7 @@ function makeEntry(
     id,
     title,
     composer,
+    genre: inferMusicGenre(title, composer, era),
     era,
     difficulty,
     grade: gradeMap[gradeNum],
