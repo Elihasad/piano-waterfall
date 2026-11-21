@@ -77,7 +77,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                   Piano Waterfall
                 </div>
                 <div className="text-[10px] text-[#888d9c] font-medium mt-0.5">
-                  Studio · v1.3.19
+                  Studio · v1.3.20
                 </div>
               </div>
             </button>

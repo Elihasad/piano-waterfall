@@ -5,6 +5,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Clock,
   FileText,
   Globe,
   Loader2,
@@ -69,6 +70,14 @@ const DIFF_BADGE: Record<DifficultyTier, { labelVi: string; labelEn: string; cls
 
 function toggleItem<T>(list: T[], item: T): T[] {
   return list.includes(item) ? list.filter((x) => x !== item) : [...list, item];
+}
+
+function formatDuration(sec?: number): string | null {
+  if (!sec || !Number.isFinite(sec) || sec <= 0) return null;
+  const total = Math.max(1, Math.round(sec));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 export const LibraryView: React.FC<LibraryViewProps> = ({
@@ -359,7 +368,9 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     const sorted = [...list];
     if (sortBy === 'title-asc') sorted.sort((a, b) => a.title.localeCompare(b.title));
     else if (sortBy === 'grade-desc') sorted.sort((a, b) => b.gradeNum - a.gradeNum);
-    else sorted.sort((a, b) => a.gradeNum - b.gradeNum);
+    else if (sortBy === 'dur-asc')
+      sorted.sort((a, b) => (a.durationSec ?? 9999) - (b.durationSec ?? 9999));
+    else if (sortBy === 'grade-asc') sorted.sort((a, b) => a.gradeNum - b.gradeNum);
     return sorted;
   }, [
     catalogEntries,
@@ -611,8 +622,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               </h1>
               <p className="text-sm text-slate-300 max-w-xl leading-relaxed">
                 {isVi
-                  ? 'Nhập hàng loạt MIDI / MusicXML / PDF hoặc mở tập ngay hơn 3.580 bản nhạc tích hợp sẵn đủ 20 thể loại — 100% offline.'
-                  : 'Batch-import MIDI, MusicXML, or PDF files, or instantly practice 3,580+ built-in offline scores across all 20 music genres.'}
+                  ? 'Nhập hàng loạt MIDI / MusicXML / PDF hoặc mở tập ngay hơn 4.240 bản nhạc tích hợp sẵn đủ 20 thể loại — 100% offline.'
+                  : 'Batch-import MIDI, MusicXML, or PDF files, or instantly practice 4,240+ built-in offline scores across all 20 music genres.'}
               </p>
             </div>
 
@@ -762,14 +773,15 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                     {activeTab === 'my' && (
                       <option value="newest">{isVi ? 'Sắp xếp: Mới nhất' : 'Sort: Newest'}</option>
                     )}
+                    {activeTab === 'catalog' && (
+                      <option value="newest">{isVi ? 'Sắp xếp: Đề xuất' : 'Sort: Featured'}</option>
+                    )}
                     <option value="grade-asc">{isVi ? 'Cấp độ: Dễ → Khó' : 'Grade: Easy → Hard'}</option>
                     <option value="grade-desc">{isVi ? 'Cấp độ: Khó → Dễ' : 'Grade: Hard → Easy'}</option>
                     <option value="title-asc">{isVi ? 'Tên: A → Z' : 'Title: A → Z'}</option>
+                    <option value="dur-asc">{isVi ? 'Thời lượng: Ngắn → Dài' : 'Duration: Short → Long'}</option>
                     {activeTab === 'my' && (
-                      <>
-                        <option value="bpm-asc">{isVi ? 'Tốc độ: BPM ↑' : 'Tempo: BPM ↑'}</option>
-                        <option value="dur-asc">{isVi ? 'Độ dài: Ngắn → Dài' : 'Duration: Short → Long'}</option>
-                      </>
+                      <option value="bpm-asc">{isVi ? 'Tốc độ: BPM ↑' : 'Tempo: BPM ↑'}</option>
                     )}
                   </select>
                 </div>
@@ -895,7 +907,16 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                           <h3 className="font-bold text-base text-[#14151c] truncate mt-1.5">
                             {s.title}
                           </h3>
-                          <div className="text-xs text-[#4a4f5e] mt-0.5 flex items-center gap-2">
+                          <div className="text-xs text-[#4a4f5e] mt-0.5 flex flex-wrap items-center gap-2">
+                            {formatDuration(s.durationSec) && (
+                              <>
+                                <span className="inline-flex items-center gap-1 font-mono font-semibold text-[#14151c]">
+                                  <Clock className="w-3 h-3 text-[#4f46e5]" />
+                                  {formatDuration(s.durationSec)}
+                                </span>
+                                <span>·</span>
+                              </>
+                            )}
                             <span>
                               {s.measures.length} {isVi ? 'ô nhịp' : 'bars'}
                             </span>
@@ -972,11 +993,21 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                         <h3 className="font-bold text-base text-[#14151c] leading-snug pt-0.5">
                           {entry.title}
                         </h3>
-                        <div className="text-xs text-[#4a4f5e]">
-                          {entry.composer} ·{' '}
+                        <div className="text-xs text-[#4a4f5e] flex flex-wrap items-center gap-1.5">
+                          <span className="truncate">{entry.composer}</span>
+                          <span>·</span>
                           <span className="font-mono uppercase text-[10px]">
                             {entry.format === 'mid' ? 'MIDI' : 'MusicXML'}
                           </span>
+                          {formatDuration(entry.durationSec) && (
+                            <>
+                              <span>·</span>
+                              <span className="inline-flex items-center gap-1 font-mono font-semibold text-[#14151c]">
+                                <Clock className="w-3 h-3 text-[#4f46e5]" />
+                                {formatDuration(entry.durationSec)}
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
 

@@ -72,6 +72,7 @@ export interface PublicDomainCatalogEntry {
   composer: string;
   genre: MusicGenre;
   bundled?: boolean;
+  durationSec?: number;
   era: 'Baroque' | 'Classical' | 'Romantic' | 'Impressionist' | 'Ragtime' | 'Traditional';
   difficulty: DifficultyTier;
   grade: PianoGrade;
@@ -91,6 +92,7 @@ interface CompactCatalogRow {
   s?: string;
   gr?: MusicGenre;
   b?: number;
+  dur?: number;
   e: PublicDomainCatalogEntry['era'];
   d: DifficultyTier;
   g: PianoGrade;
@@ -118,6 +120,7 @@ export async function loadFullPublicDomainCatalog(): Promise<PublicDomainCatalog
       composer: r.c,
       genre: r.gr ?? inferMusicGenre(r.t, r.c, r.e),
       bundled: r.b === 1,
+      durationSec: r.dur,
       era: r.e,
       difficulty: r.d,
       grade: r.g,
