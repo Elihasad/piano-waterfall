@@ -75,7 +75,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-[#e7e3d9]">
           <h2 className="display-serif text-base font-bold text-[#14151c]">
             {t(language, 'settingsTitle')}{' '}
-            <span className="font-sans text-[11px] font-normal text-[#888d9c]">v1.3.23</span>
+            <span className="font-sans text-[11px] font-normal text-[#888d9c]">v1.3.24</span>
           </h2>
           <button
             type="button"

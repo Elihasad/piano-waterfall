@@ -1,4 +1,4 @@
-const CACHE_NAME = 'piano-waterfall-v1.3.23';
+const CACHE_NAME = 'piano-waterfall-v1.3.24';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
