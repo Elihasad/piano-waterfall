@@ -77,6 +77,19 @@ export type AccompanimentStyleId =
   | 'jazz-lofi'
   | 'scale-drill';
 
+export type DifficultyTier = 'beginner' | 'intermediate' | 'advanced';
+
+export type PianoGrade =
+  | 'Grade 1'
+  | 'Grade 2'
+  | 'Grade 3'
+  | 'Grade 4'
+  | 'Grade 5'
+  | 'Grade 6'
+  | 'Grade 7'
+  | 'Grade 8'
+  | 'Diploma';
+
 export interface Song {
   id: string;
   title: string;
@@ -92,6 +105,9 @@ export interface Song {
   maxMidi: number;
   chords?: ChordEvent[];
   detectedKey?: DetectedKey;
+  difficulty?: DifficultyTier;
+  grade?: PianoGrade;
+  gradeNum?: number; // 1..9 (9 = Diploma)
 }
 
 export interface HandControlState {
