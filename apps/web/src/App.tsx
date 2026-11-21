@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { RotateCw } from 'lucide-react';
+import { ChevronDown, Pause, Play, SkipBack, SlidersHorizontal } from 'lucide-react';
 import { MidiInputManager, type MidiDeviceState } from './audio/midiInput';
 import { PianoSynth } from './audio/pianoSynth';
 import { PlaybackClock, type PlaybackSnapshot } from './audio/playbackClock';
@@ -67,6 +67,7 @@ export default function App() {
   });
   const [showPracticePath, setShowPracticePath] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -216,8 +217,13 @@ export default function App() {
 
   const handleTogglePlay = useCallback(() => {
     void player.unlock();
+    const willPlay = !clock.getSnapshot().isPlaying;
     clock.togglePlay();
     setSnapshot(clock.getSnapshot());
+    // Auto-collapse toolbar on short mobile landscape screens when starting playback
+    if (willPlay && typeof window !== 'undefined' && window.innerHeight < 500) {
+      setFocusMode(true);
+    }
   }, [clock, player]);
 
   const handleRestart = useCallback(() => {
@@ -391,91 +397,130 @@ export default function App() {
       )}
 
       {activeView === 'player' && (
-        <div className="flex flex-col w-full h-full bg-[#0c0e16]">
-          <TopBar
-            language={settings.language}
-            song={currentSong}
-            isPlaying={snapshot.isPlaying}
-            currentTimeSec={snapshot.currentTimeSec}
-            speedRatio={snapshot.speedRatio}
-            transpose={snapshot.transpose}
-            loopEnabled={snapshot.loopEnabled}
-            loopStartMeasure={snapshot.loopStartMeasure}
-            loopEndMeasure={snapshot.loopEndMeasure}
-            metronomeEnabled={snapshot.metronomeEnabled}
-            practiceMode={snapshot.practiceMode}
-            waitingMidis={snapshot.waitingMidis}
-            midiDevices={midiState.connectedNames}
-            soundPreset={settings.soundPreset}
-            hands={snapshot.hands}
-            noteLabelMode={settings.noteLabelMode}
-            effectsEnabled={settings.effectsEnabled}
-            showFallingNoteLabels={settings.showFallingNoteLabels ?? true}
-            keyboardLabelMode={settings.keyboardLabelMode ?? 'c-only'}
-            leftHandColor={settings.leftHandColor ?? '#4ade80'}
-            rightHandColor={settings.rightHandColor ?? '#22d3ee'}
-            handSplitMode={settings.handSplitMode ?? 'auto'}
-            fullKeyboard={fullKeyboard}
-            darkTheme={darkTheme}
-            isAccompanimentActive={Boolean(accompanimentSong)}
-            onTogglePlay={handleTogglePlay}
-            onRestart={handleRestart}
-            onStepMeasure={handleStepMeasure}
-            onSeek={handleSeek}
-            onSpeedChange={handleSpeedChange}
-            onTransposeChange={handleTransposeChange}
-            onLoopChange={handleLoopChange}
-            onPracticeModeChange={handlePracticeModeChange}
-            onSoundPresetChange={handleSoundPresetChange}
-            onHandsChange={handleHandsChange}
-            onCycleNoteLabelMode={handleCycleNoteLabelMode}
-            onToggleEffects={() =>
-              handleUpdateSettings({ effectsEnabled: !settings.effectsEnabled })
-            }
-            onUpdateDisplaySettings={handleUpdateSettings}
-            onToggleFullKeyboard={() => setFullKeyboard((v) => !v)}
-            onToggleTheme={() => setDarkTheme((d) => !d)}
-            onToggleMetronome={handleToggleMetronome}
-            onOpenPracticePath={() => setShowPracticePath(true)}
-            onOpenAccompaniment={() => setActiveView('arrange')}
-            onOpenTheory={() => setActiveView('theory')}
-            onOpenQuiz={() => setActiveView('quiz')}
-            onOpenHome={() => {
-              if (snapshot.isPlaying) {
-                clock.pause();
-                setSnapshot(clock.getSnapshot());
-              }
-              setActiveView('home');
-            }}
-            onOpenLibrary={() => setActiveView('library')}
-            onOpenSettings={() => setShowSettings(true)}
-          />
+        <div className="relative flex flex-col w-full h-full bg-[#0c0e16]">
+          {!focusMode && (
+            <>
+              <TopBar
+                language={settings.language}
+                song={currentSong}
+                isPlaying={snapshot.isPlaying}
+                currentTimeSec={snapshot.currentTimeSec}
+                speedRatio={snapshot.speedRatio}
+                transpose={snapshot.transpose}
+                loopEnabled={snapshot.loopEnabled}
+                loopStartMeasure={snapshot.loopStartMeasure}
+                loopEndMeasure={snapshot.loopEndMeasure}
+                metronomeEnabled={snapshot.metronomeEnabled}
+                practiceMode={snapshot.practiceMode}
+                waitingMidis={snapshot.waitingMidis}
+                midiDevices={midiState.connectedNames}
+                soundPreset={settings.soundPreset}
+                hands={snapshot.hands}
+                noteLabelMode={settings.noteLabelMode}
+                effectsEnabled={settings.effectsEnabled}
+                showFallingNoteLabels={settings.showFallingNoteLabels ?? true}
+                keyboardLabelMode={settings.keyboardLabelMode ?? 'c-only'}
+                leftHandColor={settings.leftHandColor ?? '#4ade80'}
+                rightHandColor={settings.rightHandColor ?? '#22d3ee'}
+                handSplitMode={settings.handSplitMode ?? 'auto'}
+                fullKeyboard={fullKeyboard}
+                darkTheme={darkTheme}
+                isAccompanimentActive={Boolean(accompanimentSong)}
+                onTogglePlay={handleTogglePlay}
+                onRestart={handleRestart}
+                onStepMeasure={handleStepMeasure}
+                onSeek={handleSeek}
+                onSpeedChange={handleSpeedChange}
+                onTransposeChange={handleTransposeChange}
+                onLoopChange={handleLoopChange}
+                onPracticeModeChange={handlePracticeModeChange}
+                onSoundPresetChange={handleSoundPresetChange}
+                onHandsChange={handleHandsChange}
+                onCycleNoteLabelMode={handleCycleNoteLabelMode}
+                onToggleEffects={() =>
+                  handleUpdateSettings({ effectsEnabled: !settings.effectsEnabled })
+                }
+                onUpdateDisplaySettings={handleUpdateSettings}
+                onToggleFullKeyboard={() => setFullKeyboard((v) => !v)}
+                onToggleFocusMode={() => setFocusMode(true)}
+                onToggleTheme={() => setDarkTheme((d) => !d)}
+                onToggleMetronome={handleToggleMetronome}
+                onOpenPracticePath={() => setShowPracticePath(true)}
+                onOpenAccompaniment={() => setActiveView('arrange')}
+                onOpenTheory={() => setActiveView('theory')}
+                onOpenQuiz={() => setActiveView('quiz')}
+                onOpenHome={() => {
+                  if (snapshot.isPlaying) {
+                    clock.pause();
+                    setSnapshot(clock.getSnapshot());
+                  }
+                  setActiveView('home');
+                }}
+                onOpenLibrary={() => setActiveView('library')}
+                onOpenSettings={() => setShowSettings(true)}
+              />
 
-          {isPortraitMobile && (
-            <div className="bg-[#eceefe] border-b border-[#4f46e5]/30 px-3 py-1.5 text-[11px] text-[#4f46e5] font-medium flex items-center justify-center gap-1.5">
-              <RotateCw className="w-3.5 h-3.5" />
-              <span>{t(settings.language, 'portraitHint')}</span>
-            </div>
+              {!isPortraitMobile && (
+                <ChordRibbon
+                  language={settings.language}
+                  detectedKey={liveHarmony.key}
+                  chords={liveHarmony.chords}
+                  currentTimeSec={snapshot.currentTimeSec}
+                  transpose={snapshot.transpose}
+                  noteLabelMode={settings.noteLabelMode}
+                  isAccompanimentActive={Boolean(accompanimentSong)}
+                  activeStyleLabel={
+                    activeStyleMeta
+                      ? settings.language === 'vi'
+                        ? activeStyleMeta.nameVi
+                        : activeStyleMeta.nameEn
+                      : undefined
+                  }
+                  onOpenStudio={() => setActiveView('arrange')}
+                  onReturnOriginal={handleReturnOriginal}
+                />
+              )}
+            </>
           )}
 
-          <ChordRibbon
-            language={settings.language}
-            detectedKey={liveHarmony.key}
-            chords={liveHarmony.chords}
-            currentTimeSec={snapshot.currentTimeSec}
-            transpose={snapshot.transpose}
-            noteLabelMode={settings.noteLabelMode}
-            isAccompanimentActive={Boolean(accompanimentSong)}
-            activeStyleLabel={
-              activeStyleMeta
-                ? settings.language === 'vi'
-                  ? activeStyleMeta.nameVi
-                  : activeStyleMeta.nameEn
-                : undefined
-            }
-            onOpenStudio={() => setActiveView('arrange')}
-            onReturnOriginal={handleReturnOriginal}
-          />
+          {/* Ultra-minimal floating corner controls when in 100% Fullscreen Focus Mode */}
+          {focusMode && (
+            <div className="pointer-events-none absolute top-2 left-2 right-2 z-30 safe-top flex items-center justify-between gap-2">
+              <div className="pointer-events-auto flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleTogglePlay}
+                  aria-label={snapshot.isPlaying ? t(settings.language, 'pause') : t(settings.language, 'play')}
+                  className="w-10 h-10 flex items-center justify-center rounded-full bg-black/60 hover:bg-black/80 backdrop-blur border border-white/20 text-white shadow-lg active:scale-95 transition"
+                >
+                  {snapshot.isPlaying ? (
+                    <Pause className="w-4 h-4 fill-current" />
+                  ) : (
+                    <Play className="w-4 h-4 fill-current ml-0.5" />
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRestart}
+                  aria-label={t(settings.language, 'restart')}
+                  className="w-9 h-9 flex items-center justify-center rounded-full bg-black/55 hover:bg-black/80 backdrop-blur border border-white/15 text-white/90 shadow-lg active:scale-95 transition"
+                >
+                  <SkipBack className="w-4 h-4" />
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setFocusMode(false)}
+                aria-label={settings.language === 'vi' ? 'Hiện thanh điều khiển' : 'Show controls'}
+                className="pointer-events-auto inline-flex items-center gap-1.5 px-3 h-9 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur border border-white/20 text-white text-xs font-semibold shadow-lg active:scale-95 transition"
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <span>{settings.language === 'vi' ? 'Menu' : 'Controls'}</span>
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
 
           <PianoStage
             song={currentSong}

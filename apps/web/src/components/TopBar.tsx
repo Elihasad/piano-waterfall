@@ -88,6 +88,7 @@ interface TopBarProps {
   onToggleEffects: () => void;
   onUpdateDisplaySettings?: (partial: Partial<AppSettings>) => void;
   onToggleFullKeyboard: () => void;
+  onToggleFocusMode?: () => void;
   onToggleTheme?: () => void;
   onToggleMetronome?: () => void;
   onOpenPracticePath?: () => void;
@@ -145,6 +146,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onToggleEffects,
   onUpdateDisplaySettings,
   onToggleFullKeyboard,
+  onToggleFocusMode,
   onToggleTheme,
   onToggleMetronome,
   onOpenPracticePath,
@@ -374,6 +376,20 @@ export const TopBar: React.FC<TopBarProps> = ({
             />
           </span>
         </button>
+
+        {/* 1-Tap Fullscreen Focus Mode (hides TopBar so Piano Waterfall gets 100% of phone screen!) */}
+        {onToggleFocusMode && (
+          <button
+            type="button"
+            onClick={onToggleFocusMode}
+            aria-label={language === 'vi' ? 'Toàn màn hình' : 'Fullscreen Focus'}
+            title={language === 'vi' ? 'Ẩn thanh điều khiển (Toàn màn hình)' : 'Hide controls (Fullscreen)'}
+            className="flex items-center gap-1 px-2.5 h-9 rounded-full bg-[#14151c] hover:bg-[#2a2d3d] text-white text-xs font-semibold shrink-0 transition"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{language === 'vi' ? 'Full' : 'Full'}</span>
+          </button>
+        )}
 
         {/* Live Display, Colors, Effects & Note Labels Popover */}
         <button
