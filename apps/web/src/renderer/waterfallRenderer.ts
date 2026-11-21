@@ -1,6 +1,46 @@
 import { clampMidi, midiToNoteLabel } from '../core/noteNames';
-import type { Hand, HandControlState, NoteLabelMode, Song } from '../core/types';
+import { resolveEffectiveHand } from '../core/parsers/handSeparation';
+import type {
+  Hand,
+  HandControlState,
+  HandSplitMode,
+  KeyboardLabelMode,
+  NoteLabelMode,
+  Song,
+} from '../core/types';
 import type { KeyboardLayout } from './keyboardLayout';
+
+function parseHexRgb(hex: string): [number, number, number] {
+  const clean = hex.replace('#', '').trim();
+  if (clean.length === 3) {
+    return [
+      parseInt(clean[0] + clean[0], 16) || 0,
+      parseInt(clean[1] + clean[1], 16) || 0,
+      parseInt(clean[2] + clean[2], 16) || 0,
+    ];
+  }
+  if (clean.length === 6) {
+    return [
+      parseInt(clean.slice(0, 2), 16) || 0,
+      parseInt(clean.slice(2, 4), 16) || 0,
+      parseInt(clean.slice(4, 6), 16) || 0,
+    ];
+  }
+  return [34, 211, 238];
+}
+
+function darkenHex(hex: string, factor = 0.56): string {
+  const [r, g, b] = parseHexRgb(hex);
+  const dr = Math.max(0, Math.min(255, Math.round(r * factor)));
+  const dg = Math.max(0, Math.min(255, Math.round(g * factor)));
+  const db = Math.max(0, Math.min(255, Math.round(b * factor)));
+  return `rgb(${dr}, ${dg}, ${db})`;
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const [r, g, b] = parseHexRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 export interface Particle {
   x: number;
@@ -24,6 +64,11 @@ export interface WaterfallFrameParams {
   hands: HandControlState;
   noteLabelMode: NoteLabelMode;
   showKeyLabels: boolean;
+  showFallingNoteLabels?: boolean;
+  keyboardLabelMode?: KeyboardLabelMode;
+  leftHandColor?: string;
+  rightHandColor?: string;
+  handSplitMode?: HandSplitMode;
   effectsEnabled: boolean;
   loopEnabled: boolean;
   loopStartMeasure: number;
@@ -72,6 +117,11 @@ export function renderWaterfallFrame(
     hands,
     noteLabelMode,
     showKeyLabels,
+    showFallingNoteLabels = true,
+    keyboardLabelMode = showKeyLabels ? 'c-only' : 'off',
+    leftHandColor = '#4ade80',
+    rightHandColor = '#22d3ee',
+    handSplitMode = 'auto',
     effectsEnabled,
     loopEnabled,
     loopStartMeasure,
@@ -144,9 +194,13 @@ export function renderWaterfallFrame(
   const windowStart = currentTimeSec - 0.05;
   const windowEnd = currentTimeSec + lookAheadSec + 0.2;
 
+  const leftBlackColor = darkenHex(leftHandColor, 0.56);
+  const rightBlackColor = darkenHex(rightHandColor, 0.56);
+
   // Draw white-key bars first, then black-key bars on top so black-key labels never get obscured
   const visibleNotes: Array<{
     note: Song['notes'][number];
+    effectiveHand: Hand;
     pitchedMidi: number;
     keyRect: NonNullable<ReturnType<KeyboardLayout['byMidi']['get']>>;
     barTop: number;
@@ -160,7 +214,8 @@ export function renderWaterfallFrame(
     const noteEnd = note.startTimeSec + note.durationSec;
     if (noteEnd < windowStart) continue;
 
-    const visible = note.hand === 'left' ? hands.left.visual : hands.right.visual;
+    const effectiveHand = resolveEffectiveHand(note, handSplitMode);
+    const visible = effectiveHand === 'left' ? hands.left.visual : hands.right.visual;
     if (!visible) continue;
 
     const pitchedMidi = clampMidi(note.midi + transpose);
@@ -176,9 +231,9 @@ export function renderWaterfallFrame(
 
     const isHit = note.startTimeSec <= currentTimeSec && noteEnd > currentTimeSec;
     if (isHit) {
-      activeKeyHands.set(pitchedMidi, note.hand);
+      activeKeyHands.set(pitchedMidi, effectiveHand);
       if (effectsEnabled && isPlaying && particles.length < 180 && Math.random() < 0.45) {
-        const color = note.hand === 'left' ? '#4ade80' : '#22d3ee';
+        const color = effectiveHand === 'left' ? leftHandColor : rightHandColor;
         particles.push({
           x: keyRect.x + keyRect.width / 2 + (Math.random() - 0.5) * keyRect.width * 0.6,
           y: waterfallHeight - 2,
@@ -192,13 +247,13 @@ export function renderWaterfallFrame(
     }
 
     if (barHeight <= 1) continue;
-    visibleNotes.push({ note, pitchedMidi, keyRect, barTop, barBottom, barHeight, isHit });
+    visibleNotes.push({ note, effectiveHand, pitchedMidi, keyRect, barTop, barBottom, barHeight, isHit });
   }
 
   visibleNotes.sort((a, b) => Number(a.keyRect.isBlack) - Number(b.keyRect.isBlack));
 
   for (const item of visibleNotes) {
-    const { note, pitchedMidi, keyRect, barTop, barBottom, barHeight, isHit } = item;
+    const { note, effectiveHand, pitchedMidi, keyRect, barTop, barBottom, barHeight, isHit } = item;
     const padX = keyRect.isBlack ? 0.5 : 1.5;
     const barX = keyRect.x + padX;
     const barW = Math.max(6, keyRect.width - padX * 2);
@@ -206,17 +261,17 @@ export function renderWaterfallFrame(
     const isWaiting = waitingMidis.has(pitchedMidi) && Math.abs(note.startTimeSec - currentTimeSec) < 0.08;
 
     const fill =
-      note.hand === 'left'
+      effectiveHand === 'left'
         ? keyRect.isBlack
-          ? '#15803d'
-          : '#4ade80'
+          ? leftBlackColor
+          : leftHandColor
         : keyRect.isBlack
-          ? '#0369a1'
-          : '#22d3ee';
+          ? rightBlackColor
+          : rightHandColor;
 
     ctx.save();
     if (effectsEnabled && (isHit || isWaiting)) {
-      ctx.shadowColor = isWaiting ? '#fbbf24' : note.hand === 'left' ? '#4ade80' : '#22d3ee';
+      ctx.shadowColor = isWaiting ? '#fbbf24' : effectiveHand === 'left' ? leftHandColor : rightHandColor;
       ctx.shadowBlur = isWaiting ? 18 : 14;
     }
     ctx.fillStyle = fill;
@@ -228,8 +283,8 @@ export function renderWaterfallFrame(
     ctx.stroke();
     ctx.restore();
 
-    // Always render crisp note name on EVERY falling bar (including black keys & short notes!)
-    if (noteLabelMode !== 'off' && barHeight >= 4) {
+    // Render crisp note name on falling bars when enabled
+    if (showFallingNoteLabels && noteLabelMode !== 'off' && barHeight >= 4) {
       const label = midiToNoteLabel(pitchedMidi, noteLabelMode, false);
       const isSharp = label.length >= 2;
       const fontSize = keyRect.isBlack
@@ -273,7 +328,7 @@ export function renderWaterfallFrame(
       grad.addColorStop(0, 'rgba(255, 255, 255, 0.95)');
       grad.addColorStop(
         0.4,
-        hand === 'left' ? 'rgba(74, 222, 128, 0.65)' : 'rgba(34, 211, 238, 0.65)',
+        hexToRgba(hand === 'left' ? leftHandColor : rightHandColor, 0.65),
       );
       grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
       ctx.fillStyle = grad;
@@ -322,9 +377,9 @@ export function renderWaterfallFrame(
     } else if (waiting) {
       ctx.fillStyle = '#fde047';
     } else if (activeHand === 'left') {
-      ctx.fillStyle = '#4ade80';
+      ctx.fillStyle = leftHandColor;
     } else if (activeHand === 'right') {
-      ctx.fillStyle = '#22d3ee';
+      ctx.fillStyle = rightHandColor;
     } else {
       ctx.fillStyle = '#f8fafc';
     }
@@ -334,10 +389,12 @@ export function renderWaterfallFrame(
     ctx.lineWidth = 1;
     ctx.strokeRect(key.x + 0.5, 0, key.width - 1, key.height - 2);
 
-    if (showKeyLabels && key.width >= 12) {
-      const isC = key.midi % 12 === 0;
+    const isC = key.midi % 12 === 0;
+    const shouldDrawWhiteLabel =
+      keyboardLabelMode === 'all' || (keyboardLabelMode === 'c-only' && isC);
+    if (shouldDrawWhiteLabel && key.width >= 10) {
       const text = midiToNoteLabel(key.midi, noteLabelMode === 'off' ? 'letters' : noteLabelMode, isC);
-      const fontSize = Math.max(8, Math.min(12, Math.floor(key.width * 0.42)));
+      const fontSize = Math.max(8, Math.min(12, Math.floor(key.width * 0.44)));
       ctx.font = `${isC ? '700' : '500'} ${fontSize}px system-ui, -apple-system, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
@@ -357,9 +414,9 @@ export function renderWaterfallFrame(
     } else if (waiting) {
       ctx.fillStyle = '#eab308';
     } else if (activeHand === 'left') {
-      ctx.fillStyle = '#16a34a';
+      ctx.fillStyle = leftBlackColor;
     } else if (activeHand === 'right') {
-      ctx.fillStyle = '#0891b2';
+      ctx.fillStyle = rightBlackColor;
     } else {
       ctx.fillStyle = '#18181f';
     }
@@ -370,8 +427,8 @@ export function renderWaterfallFrame(
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // Draw crisp note labels on BLACK keys too!
-    if (showKeyLabels && key.width >= 9) {
+    // Draw crisp note labels on BLACK keys only when keyboardLabelMode === 'all'
+    if (keyboardLabelMode === 'all' && key.width >= 9) {
       const text = midiToNoteLabel(key.midi, noteLabelMode === 'off' ? 'letters' : noteLabelMode, false);
       const fontSize = Math.max(7, Math.min(10, Math.floor(key.width * 0.55)));
       ctx.font = `700 ${fontSize}px system-ui, -apple-system, sans-serif`;

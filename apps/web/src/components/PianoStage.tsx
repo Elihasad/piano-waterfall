@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { NotePlayer } from '../audio/pianoSynth';
 import type { PlaybackClock, PlaybackSnapshot } from '../audio/playbackClock';
 import { computeAutoKeyRange, MAX_PIANO_MIDI, MIN_PIANO_MIDI } from '../core/noteNames';
-import type { NoteLabelMode, Song } from '../core/types';
+import type { HandSplitMode, KeyboardLabelMode, NoteLabelMode, Song } from '../core/types';
 import { buildKeyboardLayout, hitTestKey } from '../renderer/keyboardLayout';
 import { renderWaterfallFrame, type Particle } from '../renderer/waterfallRenderer';
 
@@ -13,6 +13,11 @@ interface PianoStageProps {
   transpose: number;
   noteLabelMode: NoteLabelMode;
   showKeyLabels: boolean;
+  showFallingNoteLabels?: boolean;
+  keyboardLabelMode?: KeyboardLabelMode;
+  leftHandColor?: string;
+  rightHandColor?: string;
+  handSplitMode?: HandSplitMode;
   effectsEnabled: boolean;
   fullKeyboard: boolean;
   externalPressedMidis: Set<number>;
@@ -28,6 +33,11 @@ export const PianoStage: React.FC<PianoStageProps> = ({
   transpose,
   noteLabelMode,
   showKeyLabels,
+  showFallingNoteLabels = true,
+  keyboardLabelMode = 'c-only',
+  leftHandColor = '#4ade80',
+  rightHandColor = '#22d3ee',
+  handSplitMode = 'auto',
   effectsEnabled,
   fullKeyboard,
   externalPressedMidis,
@@ -134,6 +144,11 @@ export const PianoStage: React.FC<PianoStageProps> = ({
           hands: snap.hands,
           noteLabelMode,
           showKeyLabels,
+          showFallingNoteLabels,
+          keyboardLabelMode,
+          leftHandColor,
+          rightHandColor,
+          handSplitMode,
           effectsEnabled,
           loopEnabled: snap.loopEnabled,
           loopStartMeasure: snap.loopStartMeasure,
@@ -168,6 +183,11 @@ export const PianoStage: React.FC<PianoStageProps> = ({
     keyboardHeight,
     noteLabelMode,
     showKeyLabels,
+    showFallingNoteLabels,
+    keyboardLabelMode,
+    leftHandColor,
+    rightHandColor,
+    handSplitMode,
     effectsEnabled,
     externalPressedMidis,
     onSnapshotTick,

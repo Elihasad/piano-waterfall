@@ -13,6 +13,11 @@ const DEFAULT_SETTINGS: AppSettings = {
   omrServerUrl: '',
   noteLabelMode: 'letters',
   showKeyLabels: true,
+  showFallingNoteLabels: true,
+  keyboardLabelMode: 'c-only',
+  leftHandColor: '#4ade80',
+  rightHandColor: '#22d3ee',
+  handSplitMode: 'auto',
   effectsEnabled: true,
 };
 

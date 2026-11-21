@@ -1,6 +1,7 @@
 import { Midi } from '@tonejs/midi';
 import { clampMidi } from '../noteNames';
 import type { Hand, MeasureEvent, NoteEvent, Song, TempoEvent } from '../types';
+import { normalizeHandSeparation } from './handSeparation';
 
 function generateId(prefix: string): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -71,37 +72,7 @@ export function parseMidiBuffer(buffer: ArrayBuffer, fallbackTitle: string): Son
     });
   });
 
-  notes.sort((a, b) => a.startTimeSec - b.startTimeSec || a.midi - b.midi);
-
-  // Anti-crossing cleanup for simultaneous note clusters: if a 'right' note sits below a 'left' note
-  // at the same instant, sort hands cleanly by pitch so lower notes stay Left (green) and higher stay Right (blue)
-  let clusterStart = 0;
-  while (clusterStart < notes.length) {
-    let clusterEnd = clusterStart + 1;
-    while (
-      clusterEnd < notes.length &&
-      notes[clusterEnd].startTimeSec - notes[clusterStart].startTimeSec <= 0.03
-    ) {
-      clusterEnd++;
-    }
-    if (clusterEnd - clusterStart >= 2) {
-      const slice = notes.slice(clusterStart, clusterEnd);
-      const leftNotes = slice.filter((n) => n.hand === 'left');
-      const rightNotes = slice.filter((n) => n.hand === 'right');
-      if (leftNotes.length > 0 && rightNotes.length > 0) {
-        const maxLeft = Math.max(...leftNotes.map((n) => n.midi));
-        const minRight = Math.min(...rightNotes.map((n) => n.midi));
-        if (minRight < maxLeft) {
-          const sortedByPitch = [...slice].sort((a, b) => a.midi - b.midi);
-          const leftCount = leftNotes.length;
-          sortedByPitch.forEach((n, idx) => {
-            n.hand = idx < leftCount ? 'left' : 'right';
-          });
-        }
-      }
-    }
-    clusterStart = clusterEnd;
-  }
+  normalizeHandSeparation(notes);
 
   const lastEnd = notes.reduce((acc, n) => Math.max(acc, n.startTimeSec + n.durationSec), 0);
   const totalMeasures = Math.max(1, Math.ceil(lastEnd / measureDurationSec));

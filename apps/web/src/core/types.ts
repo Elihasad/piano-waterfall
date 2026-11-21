@@ -2,6 +2,10 @@ export type Hand = 'left' | 'right';
 
 export type NoteLabelMode = 'letters' | 'solfege' | 'off';
 
+export type KeyboardLabelMode = 'c-only' | 'all' | 'off';
+
+export type HandSplitMode = 'auto' | 'pitch' | 'swap';
+
 export type SourceFormat = 'musicxml' | 'midi' | 'pdf';
 
 export type Language = 'en' | 'vi';
@@ -121,5 +125,10 @@ export interface AppSettings {
   omrServerUrl: string;
   noteLabelMode: NoteLabelMode;
   showKeyLabels: boolean;
+  showFallingNoteLabels: boolean;
+  keyboardLabelMode: KeyboardLabelMode;
+  leftHandColor: string;
+  rightHandColor: string;
+  handSplitMode: HandSplitMode;
   effectsEnabled: boolean;
 }

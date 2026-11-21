@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
-import { X, Usb } from 'lucide-react';
+import { Palette, Sparkles, Usb, X } from 'lucide-react';
 import { t } from '../core/i18n';
-import type { AppSettings, Language, SoundPreset } from '../core/types';
+import type {
+  AppSettings,
+  HandSplitMode,
+  KeyboardLabelMode,
+  Language,
+  SoundPreset,
+} from '../core/types';
 
 interface SettingsModalProps {
   settings: AppSettings;
@@ -11,6 +17,13 @@ interface SettingsModalProps {
   onSave: (partial: Partial<AppSettings>) => void;
   onClose: () => void;
 }
+
+const COLOR_PRESETS: Array<{ name: string; left: string; right: string }> = [
+  { name: 'Classic', left: '#4ade80', right: '#22d3ee' },
+  { name: 'Synthesia', left: '#fb923c', right: '#38bdf8' },
+  { name: 'Neon', left: '#f472b6', right: '#2dd4bf' },
+  { name: 'Royal', left: '#a78bfa', right: '#fbbf24' },
+];
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   settings,
@@ -22,14 +35,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const [language, setLanguage] = useState<Language>(settings.language);
   const [soundPreset, setSoundPreset] = useState<SoundPreset>(settings.soundPreset);
-  const [showKeyLabels, setShowKeyLabels] = useState(settings.showKeyLabels);
+  const [effectsEnabled, setEffectsEnabled] = useState(settings.effectsEnabled);
+  const [showFallingNoteLabels, setShowFallingNoteLabels] = useState(
+    settings.showFallingNoteLabels ?? true,
+  );
+  const [keyboardLabelMode, setKeyboardLabelMode] = useState<KeyboardLabelMode>(
+    settings.keyboardLabelMode ?? (settings.showKeyLabels ? 'c-only' : 'off'),
+  );
+  const [leftHandColor, setLeftHandColor] = useState(settings.leftHandColor ?? '#4ade80');
+  const [rightHandColor, setRightHandColor] = useState(settings.rightHandColor ?? '#22d3ee');
+  const [handSplitMode, setHandSplitMode] = useState<HandSplitMode>(
+    settings.handSplitMode ?? 'auto',
+  );
+
+  const isVi = language === 'vi';
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave({
       language,
       soundPreset,
-      showKeyLabels,
+      effectsEnabled,
+      showFallingNoteLabels,
+      keyboardLabelMode,
+      showKeyLabels: keyboardLabelMode !== 'off',
+      leftHandColor,
+      rightHandColor,
+      handSplitMode,
     });
     onClose();
   };
@@ -43,7 +75,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-[#e7e3d9]">
           <h2 className="display-serif text-base font-bold text-[#14151c]">
             {t(language, 'settingsTitle')}{' '}
-            <span className="font-sans text-[11px] font-normal text-[#888d9c]">v1.3.18</span>
+            <span className="font-sans text-[11px] font-normal text-[#888d9c]">v1.3.19</span>
           </h2>
           <button
             type="button"
@@ -56,6 +88,156 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
+          {/* Visual & Display Customization */}
+          <div className="rounded-xl bg-white border border-[#e7e3d9] p-3.5 space-y-3">
+            <div className="font-bold text-[#14151c] flex items-center gap-1.5">
+              <Palette className="w-4 h-4 text-[#4f46e5]" />
+              <span>{isVi ? 'Màu sắc, Hiệu ứng & Hiển thị nốt' : 'Colors, Effects & Note Labels'}</span>
+            </div>
+
+            {/* Hand Colors Presets + Custom Pickers */}
+            <div className="space-y-2">
+              <div className="text-[11px] font-semibold text-[#4a4f5e]">
+                {isVi ? 'Màu tay trái & tay phải' : 'Left & Right Hand Colors'}
+              </div>
+              <div className="grid grid-cols-4 gap-1.5">
+                {COLOR_PRESETS.map((p) => {
+                  const active = leftHandColor === p.left && rightHandColor === p.right;
+                  return (
+                    <button
+                      key={p.name}
+                      type="button"
+                      onClick={() => {
+                        setLeftHandColor(p.left);
+                        setRightHandColor(p.right);
+                      }}
+                      className={`py-1.5 px-2 rounded-lg border text-[11px] font-semibold flex flex-col items-center gap-1 transition ${
+                        active
+                          ? 'border-[#4f46e5] bg-[#eceefe] text-[#14151c]'
+                          : 'border-[#e7e3d9] bg-[#f8f6f1] text-[#4a4f5e]'
+                      }`}
+                    >
+                      <span className="flex items-center gap-1">
+                        <span className="w-3 h-3 rounded-full" style={{ background: p.left }} />
+                        <span className="w-3 h-3 rounded-full" style={{ background: p.right }} />
+                      </span>
+                      <span>{p.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-0.5">
+                <label className="flex items-center justify-between bg-[#f8f6f1] rounded-lg px-2.5 py-1.5 border border-[#e7e3d9] cursor-pointer">
+                  <span className="font-medium text-[#14151c]">
+                    {isVi ? 'Tay trái (LH)' : 'Left Hand'}
+                  </span>
+                  <input
+                    type="color"
+                    value={leftHandColor}
+                    onChange={(e) => setLeftHandColor(e.target.value)}
+                    className="w-6 h-5 rounded cursor-pointer border-0 bg-transparent"
+                  />
+                </label>
+                <label className="flex items-center justify-between bg-[#f8f6f1] rounded-lg px-2.5 py-1.5 border border-[#e7e3d9] cursor-pointer">
+                  <span className="font-medium text-[#14151c]">
+                    {isVi ? 'Tay phải (RH)' : 'Right Hand'}
+                  </span>
+                  <input
+                    type="color"
+                    value={rightHandColor}
+                    onChange={(e) => setRightHandColor(e.target.value)}
+                    className="w-6 h-5 rounded cursor-pointer border-0 bg-transparent"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Hand Split Mode */}
+            <div className="space-y-1.5 pt-2 border-t border-[#e7e3d9]">
+              <div className="text-[11px] font-semibold text-[#4a4f5e]">
+                {isVi ? 'Chế độ chia tay trái / tay phải' : 'Left / Right Hand Separation'}
+              </div>
+              <div className="grid grid-cols-3 gap-1.5">
+                {(
+                  [
+                    ['auto', isVi ? 'Tự động' : 'Auto'],
+                    ['pitch', isVi ? 'Chia tại C4' : 'Split at C4'],
+                    ['swap', isVi ? 'Đảo tay' : 'Swap Hands'],
+                  ] as const
+                ).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setHandSplitMode(mode)}
+                    className={`py-1.5 rounded-lg font-semibold border transition ${
+                      handSplitMode === mode
+                        ? 'bg-[#4f46e5] text-white border-[#4f46e5]'
+                        : 'bg-[#f8f6f1] text-[#4a4f5e] border-[#e7e3d9]'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Piano Keyboard Note Labels (C-only default!) */}
+            <div className="space-y-1.5 pt-2 border-t border-[#e7e3d9]">
+              <div className="text-[11px] font-semibold text-[#4a4f5e]">
+                {isVi ? 'Tên nốt trên phím đàn piano' : 'Piano Keyboard Labels'}
+              </div>
+              <div className="grid grid-cols-3 gap-1.5">
+                {(
+                  [
+                    ['c-only', isVi ? 'Chỉ nốt C' : 'C Notes Only'],
+                    ['all', isVi ? 'Tất cả phím' : 'All Keys'],
+                    ['off', isVi ? 'Ẩn' : 'Hidden'],
+                  ] as const
+                ).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setKeyboardLabelMode(mode)}
+                    className={`py-1.5 rounded-lg font-semibold border transition ${
+                      keyboardLabelMode === mode
+                        ? 'bg-[#4f46e5] text-white border-[#4f46e5]'
+                        : 'bg-[#f8f6f1] text-[#4a4f5e] border-[#e7e3d9]'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Falling Note Labels Toggle */}
+            <label className="flex items-center justify-between pt-2 border-t border-[#e7e3d9] cursor-pointer">
+              <span className="font-semibold text-[#14151c]">
+                {isVi ? 'Tên nốt trên thanh nhạc rơi xuống' : 'Labels on falling notes'}
+              </span>
+              <input
+                type="checkbox"
+                checked={showFallingNoteLabels}
+                onChange={(e) => setShowFallingNoteLabels(e.target.checked)}
+                className="w-4 h-4 accent-[#4f46e5]"
+              />
+            </label>
+
+            {/* Visual Effects Toggle */}
+            <label className="flex items-center justify-between pt-2 border-t border-[#e7e3d9] cursor-pointer">
+              <span className="font-semibold text-[#14151c] inline-flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-[#4f46e5]" />
+                {isVi ? 'Hiệu ứng phát sáng & tia lửa khi chạm phím' : 'Glow & hit spark effects'}
+              </span>
+              <input
+                type="checkbox"
+                checked={effectsEnabled}
+                onChange={(e) => setEffectsEnabled(e.target.checked)}
+                className="w-4 h-4 accent-[#4f46e5]"
+              />
+            </label>
+          </div>
+
           {/* Language Switcher */}
           <div className="space-y-1.5">
             <label className="block font-semibold text-[#14151c]">{t(language, 'languageLabel')}</label>
@@ -138,17 +320,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             )}
           </div>
-
-          {/* Show key labels */}
-          <label className="flex items-center justify-between bg-white rounded-xl px-3 py-2.5 border border-[#e7e3d9] cursor-pointer">
-            <span className="font-semibold text-[#14151c]">{t(language, 'showKeyLabelsLabel')}</span>
-            <input
-              type="checkbox"
-              checked={showKeyLabels}
-              onChange={(e) => setShowKeyLabels(e.target.checked)}
-              className="w-4 h-4 accent-[#4f46e5]"
-            />
-          </label>
         </div>
 
         <div className="flex justify-end gap-2 px-4 py-3 bg-white border-t border-[#e7e3d9]">
@@ -161,7 +332,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
           <button
             type="submit"
-            className="px-4 py-1.5 rounded-full bg-[#14151c] hover:bg-[#2a2d3d] text-xs font-bold text-white"
+            className="px-4 py-1.5 rounded-full bg-[#14151c] hover:bg-[#2a2d3d] text-xs font-semibold text-white"
           >
             {t(language, 'save')}
           </button>

@@ -470,6 +470,11 @@ export default function App() {
             transpose={snapshot.transpose}
             noteLabelMode={settings.noteLabelMode}
             showKeyLabels={settings.showKeyLabels}
+            showFallingNoteLabels={settings.showFallingNoteLabels ?? true}
+            keyboardLabelMode={settings.keyboardLabelMode ?? 'c-only'}
+            leftHandColor={settings.leftHandColor ?? '#4ade80'}
+            rightHandColor={settings.rightHandColor ?? '#22d3ee'}
+            handSplitMode={settings.handSplitMode ?? 'auto'}
             effectsEnabled={settings.effectsEnabled}
             fullKeyboard={fullKeyboard}
             externalPressedMidis={externalPressedRef.current}

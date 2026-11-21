@@ -1,6 +1,7 @@
 import JSZip from 'jszip';
 import { clampMidi } from '../noteNames';
 import type { Hand, MeasureEvent, NoteEvent, Song, SourceFormat, TempoEvent } from '../types';
+import { normalizeHandSeparation } from './handSeparation';
 
 const STEP_TO_SEMITONE: Record<string, number> = {
   C: 0,
@@ -77,6 +78,7 @@ export function parseMusicXml(
     let beatType = 4;
     let stavesCount = 1;
     let measureStartSec = 0;
+    const staffClefs = new Map<number, string>();
 
     const openTies = new Map<string, NoteEvent>();
     const measureEls = Array.from(partEl.getElementsByTagName('measure'));
@@ -103,6 +105,11 @@ export function parseMusicXml(
           if (stavesText) {
             const parsed = Number.parseInt(stavesText, 10);
             if (parsed > 0) stavesCount = parsed;
+          }
+          for (const clefEl of Array.from(child.getElementsByTagName('clef'))) {
+            const sNum = Number.parseInt(clefEl.getAttribute('number') || '1', 10) || 1;
+            const sign = getChildText(clefEl, 'sign').toUpperCase();
+            if (sign) staffClefs.set(sNum, sign);
           }
           const timeEl = child.getElementsByTagName('time')[0];
           if (timeEl) {
@@ -167,13 +174,17 @@ export function parseMusicXml(
 
           const staffNum = Number.parseInt(getChildText(child, 'staff') || '0', 10);
           const voice = getChildText(child, 'voice') || '1';
+          const effectiveStaff = staffNum > 0 ? staffNum : 1;
+          const clefSign = staffClefs.get(effectiveStaff);
           let hand: Hand;
-          if (staffNum === 2) {
+          if (staffNum >= 2) {
+            hand = clefSign === 'G' && midi >= 64 ? 'right' : 'left';
+          } else if (stavesCount >= 2 && staffNum === 1) {
+            hand = clefSign === 'F' ? 'left' : 'right';
+          } else if (clefSign === 'F') {
             hand = 'left';
-          } else if (stavesCount >= 2 && staffNum > 0) {
-            hand = 'right';
-          } else if (parts.length >= 2) {
-            hand = partIndex >= 1 ? 'left' : 'right';
+          } else if (clefSign === 'G') {
+            hand = midi < 55 ? 'left' : 'right';
           } else {
             hand = midi < 60 ? 'left' : 'right';
           }
@@ -229,7 +240,7 @@ export function parseMusicXml(
     });
   });
 
-  notes.sort((a, b) => a.startTimeSec - b.startTimeSec || a.midi - b.midi);
+  normalizeHandSeparation(notes);
 
   const lastNoteEnd = notes.reduce((acc, n) => Math.max(acc, n.startTimeSec + n.durationSec), 0);
   const lastMeasureEnd = measures.length > 0 ? measures[measures.length - 1].endTimeSec : 0;
