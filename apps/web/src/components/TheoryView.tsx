@@ -22,7 +22,7 @@ export const TheoryView: React.FC<TheoryViewProps> = ({
   const [activeTab, setActiveTab] = useState<'lessons' | 'theory'>('lessons');
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#f8f6f1] px-4 sm:px-6 py-5 pb-24 md:pb-8">
+    <div className="flex-1 overflow-y-auto bg-[#f8f6f1] px-4 sm:px-6 py-5 pb-28 lg:pb-8">
       <div className="max-w-5xl mx-auto space-y-5">
         {/* MuseKey Teal-to-Indigo Hero */}
         <div className="theory-hero rounded-[1.75rem] p-5 sm:p-7 text-white shadow-lg flex flex-col sm:flex-row sm:items-end justify-between gap-4">

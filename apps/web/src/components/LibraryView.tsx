@@ -606,10 +606,10 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   );
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#f8f6f1] px-4 sm:px-6 py-5 pb-24 md:pb-8">
-      <div className="max-w-6xl mx-auto space-y-5">
+    <div className="flex-1 overflow-y-auto bg-[#f8f6f1] px-3 sm:px-6 py-4 sm:py-5 pb-28 lg:pb-8">
+      <div className="max-w-6xl mx-auto space-y-4 sm:space-y-5">
         {/* MuseKey Dark Staff-Lined Hero */}
-        <div className="staff-hero rounded-[1.75rem] p-5 sm:p-7 text-white shadow-lg">
+        <div className="staff-hero rounded-2xl sm:rounded-[1.75rem] p-4 sm:p-7 text-white shadow-lg">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
             <div className="space-y-1.5">
               <div className="text-xs font-medium text-teal-200/90">
@@ -868,8 +868,38 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
               </div>
             </div>
 
-            {/* Mobile Collapsible Filter Panel */}
-            {mobileFiltersOpen && <div className="lg:hidden">{renderFilterSidebar()}</div>}
+            {/* Mobile Filter Bottom Sheet Modal */}
+            {mobileFiltersOpen && (
+              <div className="lg:hidden fixed inset-0 z-50 flex flex-col justify-end bg-black/50 backdrop-blur-[1px]">
+                <div className="bg-[#f8f6f1] rounded-t-3xl max-h-[85dvh] flex flex-col overflow-hidden shadow-2xl border-t border-[#e7e3d9]">
+                  <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-[#e7e3d9]">
+                    <span className="font-bold text-sm text-[#14151c]">
+                      {isVi ? 'Bộ lọc thư viện' : 'Filter Scores'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setMobileFiltersOpen(false)}
+                      className="w-8 h-8 flex items-center justify-center rounded-full bg-[#f3f0e8] text-[#14151c]"
+                      aria-label="Close filters"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto p-3">{renderFilterSidebar()}</div>
+                  <div className="p-3 bg-white border-t border-[#e7e3d9] safe-bottom">
+                    <button
+                      type="button"
+                      onClick={() => setMobileFiltersOpen(false)}
+                      className="w-full py-3 rounded-full bg-[#14151c] text-white text-sm font-bold shadow-md"
+                    >
+                      {isVi
+                        ? `Xem ${totalItems.toLocaleString()} bản nhạc`
+                        : `Show ${totalItems.toLocaleString()} scores`}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* MY LIBRARY GRID */}
             {activeTab === 'my' && (

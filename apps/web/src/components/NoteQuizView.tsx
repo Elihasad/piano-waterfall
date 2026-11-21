@@ -83,7 +83,7 @@ export const NoteQuizView: React.FC<NoteQuizViewProps> = ({ language, song, play
   const targetName = currentNote ? `${formatPitchClass(currentNote.midi)}${octave}` : 'C4';
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#f8f6f1] px-4 sm:px-6 py-5 pb-24 md:pb-8">
+    <div className="flex-1 overflow-y-auto bg-[#f8f6f1] px-4 sm:px-6 py-5 pb-28 lg:pb-8">
       <div className="max-w-3xl mx-auto space-y-5">
         {/* Hero */}
         <div className="theory-hero rounded-[1.75rem] p-5 sm:p-6 text-white shadow-lg flex flex-col sm:flex-row sm:items-end justify-between gap-3">

@@ -182,9 +182,9 @@ export const TopBar: React.FC<TopBarProps> = ({
   const midiConnected = midiDevices.length > 0;
 
   return (
-    <header className="relative z-20 bg-white border-b border-[#e7e3d9] px-2.5 pt-2 pb-1.5 select-none text-[#14151c]">
+    <header className="relative z-20 safe-top bg-white border-b border-[#e7e3d9] px-2 sm:px-2.5 pt-1.5 sm:pt-2 pb-1.5 select-none text-[#14151c]">
       {/* Row 1: MuseKey Warm-Paper Studio Transport + Controls */}
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1.5">
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1.5 touch-pan-x">
         {/* Back to Home */}
         {onOpenHome && (
           <button
@@ -543,7 +543,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
       {/* Popover: Hands Independent Controls */}
       {openPopover === 'hands' && (
-        <div className="absolute right-2 top-[52px] z-30 w-72 rounded-xl bg-[#1e202b] border border-[#323548] shadow-2xl p-3 space-y-2.5">
+        <div className="max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:w-auto max-sm:max-h-[75dvh] max-sm:overflow-y-auto sm:absolute sm:right-2 sm:top-[52px] z-40 w-72 rounded-2xl bg-[#1e202b] border border-[#323548] shadow-2xl p-3 space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-200">{t(language, 'handsTitle')}</span>
             <button
@@ -684,7 +684,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
       {/* Popover: A-B Loop Range */}
       {openPopover === 'loop' && (
-        <div className="absolute left-36 top-[52px] z-30 w-64 rounded-xl bg-[#1e202b] border border-[#323548] shadow-2xl p-3 space-y-2.5">
+        <div className="max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:w-auto max-sm:max-h-[75dvh] max-sm:overflow-y-auto sm:absolute sm:left-36 sm:top-[52px] z-40 w-64 rounded-2xl bg-[#1e202b] border border-[#323548] shadow-2xl p-3 space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-200">{t(language, 'loopSectionTitle')}</span>
             <button
@@ -740,9 +740,9 @@ export const TopBar: React.FC<TopBarProps> = ({
         </div>
       )}
 
-      {/* Live Display, Colors, Effects & Note Labels Popover */}
+      {/* Live Display, Colors, Effects & Note Labels Popover (Bottom Sheet on Mobile!) */}
       {openPopover === 'display' && (
-        <div className="absolute right-3 top-12 z-40 w-80 max-w-[92vw] rounded-2xl bg-[#181922] border border-[#2c2e3b] shadow-2xl p-3.5 space-y-3 text-xs text-slate-100">
+        <div className="max-sm:fixed max-sm:inset-x-3 max-sm:bottom-3 max-sm:top-auto max-sm:w-auto max-sm:max-h-[78dvh] max-sm:overflow-y-auto sm:absolute sm:right-3 sm:top-12 z-40 w-80 max-w-[94vw] rounded-2xl bg-[#181922] border border-[#2c2e3b] shadow-2xl p-3.5 space-y-3 text-xs text-slate-100">
           <div className="flex items-center justify-between">
             <span className="font-bold text-slate-100 flex items-center gap-1.5">
               <Palette className="w-4 h-4 text-cyan-400" />

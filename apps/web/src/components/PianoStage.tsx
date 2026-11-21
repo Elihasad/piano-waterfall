@@ -77,8 +77,8 @@ export const PianoStage: React.FC<PianoStageProps> = ({
     return () => window.removeEventListener('resize', update);
   }, []);
 
-  const keyboardHeight = Math.max(80, Math.min(136, Math.floor(size.height * 0.28)));
-  const waterfallHeight = Math.max(120, size.height - keyboardHeight);
+  const keyboardHeight = Math.max(58, Math.min(130, Math.floor(size.height * 0.27)));
+  const waterfallHeight = Math.max(100, size.height - keyboardHeight);
 
   const keyRange = useMemo(() => {
     if (fullKeyboard) {

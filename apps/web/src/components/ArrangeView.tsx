@@ -127,7 +127,7 @@ export const ArrangeView: React.FC<ArrangeViewProps> = ({
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#f8f6f1] px-4 sm:px-6 py-5 pb-24 md:pb-8">
+    <div className="flex-1 overflow-y-auto bg-[#f8f6f1] px-4 sm:px-6 py-5 pb-28 lg:pb-8">
       <div className="max-w-5xl mx-auto space-y-5">
         {/* Indigo-Violet-Teal MuseKey Arranger Hero */}
         <div className="arrange-hero rounded-[1.75rem] p-5 sm:p-7 text-white shadow-lg flex flex-col sm:flex-row sm:items-end justify-between gap-4">

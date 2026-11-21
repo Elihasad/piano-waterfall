@@ -44,24 +44,68 @@ export const AppShell: React.FC<AppShellProps> = ({
     id: AppView;
     labelVi: string;
     labelEn: string;
+    shortVi: string;
+    shortEn: string;
     icon: React.ReactNode;
   }> = [
-    { id: 'home', labelVi: 'Trang Chủ', labelEn: 'Home', icon: <Home className="w-4 h-4" /> },
-    { id: 'player', labelVi: 'Phòng Tập', labelEn: 'Player', icon: <Piano className="w-4 h-4" /> },
-    { id: 'library', labelVi: 'Thư Viện', labelEn: 'Library', icon: <Library className="w-4 h-4" /> },
-    { id: 'arrange', labelVi: 'Đệm Hát', labelEn: 'Arrange', icon: <Sparkles className="w-4 h-4" /> },
-    { id: 'theory', labelVi: 'Lý Thuyết', labelEn: 'Theory', icon: <BookOpen className="w-4 h-4" /> },
-    { id: 'quiz', labelVi: 'Đọc Nốt', labelEn: 'Note Quiz', icon: <GraduationCap className="w-4 h-4" /> },
+    {
+      id: 'home',
+      labelVi: 'Trang Chủ',
+      labelEn: 'Home',
+      shortVi: 'Trang chủ',
+      shortEn: 'Home',
+      icon: <Home className="w-4 h-4" />,
+    },
+    {
+      id: 'player',
+      labelVi: 'Phòng Tập',
+      labelEn: 'Player',
+      shortVi: 'Tập đàn',
+      shortEn: 'Play',
+      icon: <Piano className="w-4 h-4" />,
+    },
+    {
+      id: 'library',
+      labelVi: 'Thư Viện',
+      labelEn: 'Library',
+      shortVi: 'Thư viện',
+      shortEn: 'Library',
+      icon: <Library className="w-4 h-4" />,
+    },
+    {
+      id: 'arrange',
+      labelVi: 'Đệm Hát',
+      labelEn: 'Arrange',
+      shortVi: 'Đệm hát',
+      shortEn: 'Arrange',
+      icon: <Sparkles className="w-4 h-4" />,
+    },
+    {
+      id: 'theory',
+      labelVi: 'Lý Thuyết',
+      labelEn: 'Theory',
+      shortVi: 'Học đàn',
+      shortEn: 'Learn',
+      icon: <BookOpen className="w-4 h-4" />,
+    },
+    {
+      id: 'quiz',
+      labelVi: 'Đọc Nốt',
+      labelEn: 'Note Quiz',
+      shortVi: 'Đọc nốt',
+      shortEn: 'Quiz',
+      icon: <GraduationCap className="w-4 h-4" />,
+    },
   ];
 
-  // Player drops the desktop sidebar for full-bleed 88-key studio workspace (just like MuseKey!)
-  const showSidebar = activeView !== 'player';
+  // Player drops the desktop sidebar for full-bleed 88-key studio workspace
+  const showShellChrome = activeView !== 'player';
 
   return (
-    <div className="flex w-full h-full bg-[#f8f6f1] text-[#14151c] overflow-hidden">
-      {/* Desktop Left Sidebar (MuseKey Shell) */}
-      {showSidebar && (
-        <aside className="hidden md:flex flex-col w-60 shrink-0 bg-white border-r border-[#e7e3d9] p-4 justify-between">
+    <div className="flex w-full h-full bg-[#f8f6f1] text-[#14151c] overflow-hidden safe-x">
+      {/* Desktop Left Sidebar (only >= lg 1024px so phones in landscape never get crushed!) */}
+      {showShellChrome && (
+        <aside className="hidden lg:flex flex-col w-60 shrink-0 bg-white border-r border-[#e7e3d9] p-4 justify-between">
           <div className="space-y-5">
             {/* Brand */}
             <button
@@ -77,7 +121,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                   Piano Waterfall
                 </div>
                 <div className="text-[10px] text-[#888d9c] font-medium mt-0.5">
-                  Studio · v1.3.26
+                  Studio · v1.3.27
                 </div>
               </div>
             </button>
@@ -150,9 +194,21 @@ export const AppShell: React.FC<AppShellProps> = ({
                   onClick={onToggleTheme}
                   className="p-2 rounded-xl bg-[#f8f6f1] hover:bg-[#edeae2] border border-[#e7e3d9] text-[#4a4f5e]"
                   aria-label={darkTheme ? 'Switch to Soft Paper theme' : 'Switch to Dark Studio theme'}
-                  title={darkTheme ? (isVi ? 'Nền giấy dịu mắt' : 'Soft Paper') : (isVi ? 'Nền tối Studio' : 'Dark Studio')}
+                  title={
+                    darkTheme
+                      ? isVi
+                        ? 'Nền giấy dịu mắt'
+                        : 'Soft Paper'
+                      : isVi
+                        ? 'Nền tối Studio'
+                        : 'Dark Studio'
+                  }
                 >
-                  {darkTheme ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
+                  {darkTheme ? (
+                    <Sun className="w-4 h-4 text-amber-400" />
+                  ) : (
+                    <Moon className="w-4 h-4" />
+                  )}
                 </button>
                 <button
                   type="button"
@@ -170,11 +226,59 @@ export const AppShell: React.FC<AppShellProps> = ({
 
       {/* Main Workspace */}
       <main className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
+        {/* Mobile & Tablet Compact Top Bar (gives instant access to Language, Theme, Settings!) */}
+        {showShellChrome && (
+          <header className="lg:hidden safe-top shrink-0 bg-white/95 backdrop-blur border-b border-[#e7e3d9] px-3 py-2 flex items-center justify-between gap-2 z-20">
+            <button
+              type="button"
+              onClick={() => onNavigate('home')}
+              className="flex items-center gap-2 min-w-0"
+            >
+              <div className="w-8 h-8 rounded-lg bg-[#14151c] flex items-center justify-center shrink-0">
+                <Piano className="w-4 h-4 text-[#7a93ff]" />
+              </div>
+              <div className="text-left leading-tight truncate">
+                <div className="display-serif font-bold text-sm text-[#14151c] truncate">
+                  Piano Waterfall
+                </div>
+                <div className="text-[10px] text-[#888d9c]">v1.3.27</div>
+              </div>
+            </button>
+
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={onToggleLanguage}
+                className="px-2.5 h-9 rounded-full bg-[#f8f6f1] border border-[#e7e3d9] text-xs font-bold text-[#14151c]"
+                aria-label="Switch language"
+              >
+                {language === 'vi' ? 'VI' : 'EN'}
+              </button>
+              <button
+                type="button"
+                onClick={onToggleTheme}
+                className="w-9 h-9 flex items-center justify-center rounded-full bg-[#f8f6f1] border border-[#e7e3d9] text-[#4a4f5e]"
+                aria-label={darkTheme ? 'Soft Paper' : 'Dark Studio'}
+              >
+                {darkTheme ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
+              </button>
+              <button
+                type="button"
+                onClick={onOpenSettings}
+                className="w-9 h-9 flex items-center justify-center rounded-full bg-[#f8f6f1] border border-[#e7e3d9] text-[#4a4f5e]"
+                aria-label="Settings"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+            </div>
+          </header>
+        )}
+
         {children}
 
-        {/* Mobile Bottom Sticky Dock (when not in full-bleed Player) */}
-        {showSidebar && (
-          <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur border-t border-[#e7e3d9] px-2 py-1.5 flex items-center justify-around">
+        {/* Mobile & Tablet Bottom Sticky Dock (safe-area aware, thumb-friendly 56px targets!) */}
+        {showShellChrome && (
+          <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur border-t border-[#e7e3d9] px-1 pt-1.5 pb-[max(0.4rem,env(safe-area-inset-bottom))] flex items-center justify-around shadow-[0_-2px_10px_rgba(0,0,0,0.06)]">
             {navItems.map((item) => {
               const active = activeView === item.id;
               return (
@@ -182,12 +286,16 @@ export const AppShell: React.FC<AppShellProps> = ({
                   key={item.id}
                   type="button"
                   onClick={() => onNavigate(item.id)}
-                  className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-xl text-[10px] font-semibold transition ${
-                    active ? 'text-[#4f46e5]' : 'text-[#888d9c]'
+                  className={`flex flex-col items-center justify-center gap-0.5 min-w-[52px] min-h-[44px] px-1.5 py-1 rounded-xl text-[10px] font-semibold transition ${
+                    active
+                      ? 'bg-[#eceefe] text-[#4f46e5]'
+                      : 'text-[#64697a] active:bg-[#f3f0e8]'
                   }`}
                 >
                   {item.icon}
-                  <span>{isVi ? item.labelVi : item.labelEn}</span>
+                  <span className="truncate max-w-[56px]">
+                    {isVi ? item.shortVi : item.shortEn}
+                  </span>
                 </button>
               );
             })}
