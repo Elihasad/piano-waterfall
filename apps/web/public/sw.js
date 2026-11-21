@@ -1,9 +1,15 @@
-const CACHE_NAME = 'piano-waterfall-v1.3.15';
+const CACHE_NAME = 'piano-waterfall-v1.3.16';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
-      const coreAssets = ['./', './index.html', './icon.svg', './manifest.webmanifest'];
+      const coreAssets = [
+        './',
+        './index.html',
+        './icon.svg',
+        './manifest.webmanifest',
+        './catalog/public-domain-catalog.json',
+      ];
       await cache.addAll(coreAssets);
       try {
         const res = await fetch('./index.html', { cache: 'no-store' });

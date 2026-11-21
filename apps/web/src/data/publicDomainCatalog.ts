@@ -5,6 +5,7 @@ export interface PublicDomainCatalogEntry {
   title: string;
   composer: string;
   source?: string;
+  bundled?: boolean;
   era: 'Baroque' | 'Classical' | 'Romantic' | 'Impressionist' | 'Ragtime' | 'Traditional';
   difficulty: DifficultyTier;
   grade: PianoGrade;
@@ -22,6 +23,7 @@ interface CompactCatalogRow {
   t: string;
   c: string;
   s: string;
+  b?: number;
   e: PublicDomainCatalogEntry['era'];
   d: DifficultyTier;
   g: PianoGrade;
@@ -35,7 +37,7 @@ let cachedFullCatalog: PublicDomainCatalogEntry[] | null = null;
 
 /**
  * Lazily loads the deduplicated 3,190+ Public Domain Piano MusicXML/MIDI catalog index
- * from `./catalog/public-domain-catalog.json` (falls back to the bundled 44 flagship scores offline).
+ * from `./catalog/public-domain-catalog.json` (with 507 full scores bundled directly in `./scores/`).
  */
 export async function loadFullPublicDomainCatalog(): Promise<PublicDomainCatalogEntry[]> {
   if (cachedFullCatalog) return cachedFullCatalog;
@@ -48,6 +50,7 @@ export async function loadFullPublicDomainCatalog(): Promise<PublicDomainCatalog
       title: r.t,
       composer: r.c,
       source: r.s,
+      bundled: r.b === 1,
       era: r.e,
       difficulty: r.d,
       grade: r.g,

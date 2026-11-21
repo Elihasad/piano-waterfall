@@ -3,7 +3,6 @@ import {
   AlertCircle,
   ChevronLeft,
   ChevronRight,
-  Download,
   FileText,
   Filter,
   Globe,
@@ -198,7 +197,13 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
     }
   };
 
-  const handleDownloadCatalogEntry = async (entry: PublicDomainCatalogEntry) => {
+  const handleOpenCatalogEntry = async (entry: PublicDomainCatalogEntry) => {
+    const existing = songs.find((s) => s.id === entry.id);
+    if (existing) {
+      onSelectSong(existing);
+      return;
+    }
+
     setError(null);
     setSuccessMsg(null);
     setDownloadingId(entry.id);
@@ -208,7 +213,9 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
         throw new Error(`HTTP ${res.status}`);
       }
       const blob = await res.blob();
-      const file = new File([blob], entry.fileName, { type: 'application/vnd.recordare.musicxml' });
+      const file = new File([blob], entry.fileName, {
+        type: entry.format === 'mid' ? 'audio/midi' : 'application/vnd.recordare.musicxml',
+      });
       const parsed = await parseSongFile(file);
       const song: Song = enrichSongMetadata({
         ...parsed,
@@ -222,11 +229,11 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
       await onImportSong(song);
       onSelectSong(song);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Download failed';
+      const msg = err instanceof Error ? err.message : 'Open failed';
       setError(
         isVi
-          ? `Không tải được "${entry.title}" (${msg}). Hãy kiểm tra kết nối mạng.`
-          : `Could not download "${entry.title}" (${msg}). Check your internet connection.`,
+          ? `Không mở được "${entry.title}" (${msg}).`
+          : `Could not open "${entry.title}" (${msg}).`,
       );
     } finally {
       setDownloadingId(null);
@@ -729,26 +736,32 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
 
                   <div className="flex items-center justify-between pt-2 border-t border-[#e7e3d9]">
                     <span className="text-[11px] text-[#2f9e6c] font-semibold">
-                      {alreadySaved ? (isVi ? '✓ Đã lưu offline' : '✓ Saved offline') : (isVi ? 'Miễn phí · CC0/PD' : 'Free · Public Domain')}
+                      {alreadySaved || entry.bundled
+                        ? isVi
+                          ? '✓ Sẵn có Offline'
+                          : '✓ Built-in Offline'
+                        : isVi
+                          ? 'Miễn phí · Public Domain'
+                          : 'Free · Public Domain'}
                     </span>
                     <button
                       type="button"
                       disabled={Boolean(downloadingId)}
-                      onClick={() => void handleDownloadCatalogEntry(entry)}
+                      onClick={() => void handleOpenCatalogEntry(entry)}
                       className="px-4 py-1.5 rounded-full bg-[#14151c] hover:bg-[#2a2d3d] disabled:opacity-50 text-white text-xs font-semibold inline-flex items-center gap-1.5 transition"
                     >
                       {isDownloading ? (
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       ) : (
-                        <Download className="w-3.5 h-3.5" />
+                        <Play className="w-3.5 h-3.5 fill-current" />
                       )}
                       {isDownloading
                         ? isVi
-                          ? 'Đang tải...'
-                          : 'Loading...'
+                          ? 'Đang mở...'
+                          : 'Opening...'
                         : isVi
-                          ? 'Tải & Tập ngay'
-                          : 'Load & Practice'}
+                          ? 'Tập ngay'
+                          : 'Practice'}
                     </button>
                   </div>
                 </div>
