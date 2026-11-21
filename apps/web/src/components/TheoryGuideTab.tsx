@@ -582,7 +582,7 @@ export const TheoryGuideTab: React.FC<TheoryGuideTabProps> = ({
         </div>
       )}
 
-      {/* SECTION 2: CHORD FORMULAS, T-PD-D HARMONIC FUNCTION & CADENCES (Hutchinson Ch. 5-9, 19) */}
+      {/* SECTION 2: CHORD FORMULAS, T-PD-D HARMONIC FUNCTION & CADENCES */}
       {section === 'harmony' && (
         <div className="space-y-3">
           {/* Chord Building Formulas */}
@@ -750,10 +750,10 @@ export const TheoryGuideTab: React.FC<TheoryGuideTabProps> = ({
       {/* SECTION 4: JAZZ THEORY (CH. 31) & ARPEGGIO RHYTHM GRIDS */}
       {section === 'patterns' && (
         <div className="space-y-2.5">
-          {/* Jazz Theory Quick Reference from Hutchinson Ch. 31 */}
+          {/* Jazz Theory Quick Reference */}
           <div className="rounded-xl bg-amber-950/25 border border-amber-500/35 p-3 space-y-2">
             <div className="font-bold text-amber-300">
-              {isVi ? '🎷 Cẩm nang Jazz Piano cốt lõi (Chương 31 — MusicTheory.pdf)' : '🎷 Essential Jazz Piano Theory (Ch. 31)'}
+              {isVi ? '🎷 Cẩm nang Jazz Piano cốt lõi' : '🎷 Essential Jazz Piano Theory'}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
               <div className="bg-[#181924] rounded-lg p-2 space-y-0.5">

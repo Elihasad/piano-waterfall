@@ -30,8 +30,8 @@ export const TheoryView: React.FC<TheoryViewProps> = ({
             <div className="text-xs font-medium text-teal-100/90 flex items-center gap-1.5">
               <BookOpen className="w-3.5 h-3.5" />
               {isVi
-                ? 'Học viện Piano · Giáo trình Alfred Level 1–3 & 21st-Century Music Theory'
-                : 'Piano Academy · Alfred Adult Levels 1–3 & 21st-Century Music Theory'}
+                ? 'Học viện Piano · Lộ trình thực hành & Nhạc lý đệm hát'
+                : 'Piano Academy · Progressive Lessons & Accompaniment Theory'}
             </div>
             <h1 className="display-serif text-3xl sm:text-4xl font-semibold">
               {isVi ? 'Bài Học & Lý Thuyết Đệm Hát' : 'Lessons & Music Theory'}

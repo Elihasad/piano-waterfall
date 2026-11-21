@@ -100,12 +100,12 @@ function buildExerciseSong(opts: {
 }
 
 export const LESSON_CURRICULUM: ReadonlyArray<LessonItem> = [
-  // ==================== LEVEL 1 (Alfred Adult Level 1) ====================
+  // ==================== LEVEL 1 (Beginner Foundation) ====================
   {
     id: 'lv1-c-position',
     level: 1,
     code: '1.1',
-    sourceRef: 'Alfred Level 1 · p.12–16',
+    sourceRef: 'Level 1 · 5-Finger Basics',
     titleVi: 'Thế Tay Đô 5 Ngón (C Position Warm-Up)',
     titleEn: 'C 5-Finger Position Warm-Up',
     goalVi: 'Làm quen 5 phím C–D–E–F–G cho cả tay phải (C4–G4) và tay trái (C3–G3), giữ ngón tay cong tròn đều lực.',
@@ -131,7 +131,7 @@ export const LESSON_CURRICULUM: ReadonlyArray<LessonItem> = [
       return buildExerciseSong({
         id: 'lv1-c-position',
         title: 'Bài 1.1 · Thế Tay Đô 5 Ngón (C Position)',
-        composer: 'Alfred Level 1',
+        composer: 'Studio Curriculum · Level 1',
         bpm: 84,
         totalMeasures: 7,
         tonicPc: 0,
@@ -144,7 +144,7 @@ export const LESSON_CURRICULUM: ReadonlyArray<LessonItem> = [
     id: 'lv1-primary-chords-c',
     level: 1,
     code: '1.2',
-    sourceRef: 'Alfred Level 1 · p.36–45',
+    sourceRef: 'Level 1 · Primary Chords',
     titleVi: '3 Hợp Âm Chính Trong Đô Trưởng (I – IV – V7 – I)',
     titleEn: 'Primary Chords in C Major (I – IV – V7 – I)',
     goalVi: 'Học cách chuyển mượt C → F → G7 → C bằng thế đảo gần nhất (không nhảy tay) cho cả hai tay.',
@@ -173,7 +173,7 @@ export const LESSON_CURRICULUM: ReadonlyArray<LessonItem> = [
       return buildExerciseSong({
         id: 'lv1-primary-chords-c',
         title: 'Bài 1.2 · Hợp Âm Chính C – F – G7 – C',
-        composer: 'Alfred Level 1',
+        composer: 'Studio Curriculum · Level 1',
         bpm: 76,
         totalMeasures: 8,
         tonicPc: 0,
@@ -186,7 +186,7 @@ export const LESSON_CURRICULUM: ReadonlyArray<LessonItem> = [
     id: 'lv1-middle-c-waltz',
     level: 1,
     code: '1.3',
-    sourceRef: 'Alfred Level 1 · p.72–76',
+    sourceRef: 'Level 1 · 3/4 Rhythm',
     titleVi: 'Thế Middle C & Nhịp Waltz 3/4 + Nốt Móc Đơn',
     titleEn: 'Middle C Position & 3/4 Waltz Time',
     goalVi: 'Đặt cả 2 ngón cái trên phím Đô giữa (C4), luyện nhịp 3/4 đung đưa và câu giai điệu có nốt móc đơn.',
@@ -218,7 +218,7 @@ export const LESSON_CURRICULUM: ReadonlyArray<LessonItem> = [
       return buildExerciseSong({
         id: 'lv1-middle-c-waltz',
         title: 'Bài 1.3 · Thế Middle C & Điệu Waltz 3/4',
-        composer: 'Alfred Level 1',
+        composer: 'Studio Curriculum · Level 1',
         bpm: 96,
         beatsPerMeasure: 3,
         totalMeasures: 8,
@@ -232,7 +232,7 @@ export const LESSON_CURRICULUM: ReadonlyArray<LessonItem> = [
     id: 'lv1-hanon-aerobics',
     level: 1,
     code: '1.4',
-    sourceRef: 'Alfred Level 1 · p.78 & p.87',
+    sourceRef: 'Level 1 · Finger Technic',
     titleVi: 'Luyện Ngón Hanon & Giãn Quãng 6',
     titleEn: 'Hanon Finger Aerobics & 6th Intervals',
     goalVi: 'Tăng độ độc lập và đều lực cho ngón 4 & ngón 5 (ngón yếu nhất) theo mẫu Hanon số 1.',
@@ -263,7 +263,7 @@ export const LESSON_CURRICULUM: ReadonlyArray<LessonItem> = [
       return buildExerciseSong({
         id: 'lv1-hanon-aerobics',
         title: 'Bài 1.4 · Luyện Ngón Hanon Khởi Động',
-        composer: 'Alfred Level 1',
+        composer: 'Studio Curriculum · Level 1',
         bpm: 88,
         totalMeasures: 8,
         tonicPc: 0,
@@ -276,7 +276,7 @@ export const LESSON_CURRICULUM: ReadonlyArray<LessonItem> = [
     id: 'lv1-c-scale-thumb',
     level: 1,
     code: '1.5',
-    sourceRef: 'Alfred Level 1 · p.104–110',
+    sourceRef: 'Level 1 · Major Scale',
     titleVi: 'Gam Đô Trưởng 2 Quãng Tám & Kỹ Thuật Luồn Ngón Cái',
     titleEn: 'C Major Scale (2 Octaves) & Thumb-Under Technique',
     goalVi: 'Chạy liền mạch Gam Đô Trưởng lên–xuống và rải 7 hợp âm bậc để mở khóa mọi bài đệm hát giọng C.',
@@ -294,12 +294,12 @@ export const LESSON_CURRICULUM: ReadonlyArray<LessonItem> = [
       }),
   },
 
-  // ==================== LEVEL 2 (Alfred Adult Level 2) ====================
+  // ==================== LEVEL 2 (Elementary Keys & Chords) ====================
   {
     id: 'lv2-g-major',
     level: 2,
     code: '2.1',
-    sourceRef: 'Alfred Level 2 · p.12–18',
+    sourceRef: 'Level 2 · Sharp Keys',
     titleVi: 'Giọng Sol Trưởng (G Major · 1# F#) & Hợp Âm G – C – D7',
     titleEn: 'Key of G Major (1# F#) & G – C – D7 Chords',
     goalVi: 'Làm quen hóa biểu 1 dấu thăng (F#) và rải Ballad mượt trên giọng Sol Trưởng.',
@@ -320,7 +320,7 @@ export const LESSON_CURRICULUM: ReadonlyArray<LessonItem> = [
     id: 'lv2-f-major',
     level: 2,
     code: '2.2',
-    sourceRef: 'Alfred Level 2 · p.26–32',
+    sourceRef: 'Level 2 · Flat Keys',
     titleVi: 'Giọng Fa Trưởng (F Major · 1b Bb) & Hợp Âm F – Bb – C7',
     titleEn: 'Key of F Major (1b Bb) & F – Bb – C7 Chords',
     goalVi: 'Làm quen hóa biểu 1 dấu giáng (Bb) và rải 8 nốt trữ tình trên giọng Fa Trưởng.',
@@ -341,7 +341,7 @@ export const LESSON_CURRICULUM: ReadonlyArray<LessonItem> = [
     id: 'lv2-a-minor-bolero',
     level: 2,
     code: '2.3',
-    sourceRef: 'Alfred Level 2 · p.52–60',
+    sourceRef: 'Level 2 · Minor & Bolero',
     titleVi: 'Giọng La Thứ Hòa Thanh (Am · E7) & Điệu Bolero',
     titleEn: 'A Harmonic Minor (Am – Dm – E7) & Bolero',
     goalVi: 'Nắm vững nốt bậc 7 tăng (G# trong E7) và ghép điệu Bolero/Rumba đặc trưng trên tông thứ.',
@@ -362,7 +362,7 @@ export const LESSON_CURRICULUM: ReadonlyArray<LessonItem> = [
     id: 'lv2-seventh-chords',
     level: 2,
     code: '2.4',
-    sourceRef: 'Alfred Level 2 · p.92–95',
+    sourceRef: 'Level 2 · 7th Chords',
     titleVi: 'Từ Vựng Hợp Âm Bảy (Swinging Sevenths)',
     titleEn: 'The 7th Chord Vocabulary (Swinging Sevenths)',
     goalVi: 'Làm quen 4 màu hợp âm bảy (Maj7, Min7, Dom7, m7b5) và luyện chuyển thế đảo mượt.',
@@ -383,7 +383,7 @@ export const LESSON_CURRICULUM: ReadonlyArray<LessonItem> = [
     id: 'lv2-16th-rhythm',
     level: 2,
     code: '2.5',
-    sourceRef: 'Alfred Level 2 · p.98–104',
+    sourceRef: 'Level 2 · 16th & Groove',
     titleVi: 'Tiết Tấu Móc Kép (16th Notes) & Đảo Phách Pop',
     titleEn: '16th-Note Agility & Syncopated Pop Groove',
     goalVi: 'Kiểm soát đều tốc độ nhóm 4 nốt móc kép (`1-e-&-a`) và cảm nhận đảo phách Pop hiện đại.',
@@ -401,12 +401,12 @@ export const LESSON_CURRICULUM: ReadonlyArray<LessonItem> = [
       }),
   },
 
-  // ==================== LEVEL 3 (Alfred Level 3 + MusicTheory.pdf) ====================
+  // ==================== LEVEL 3 (Intermediate Harmony & Jazz) ====================
   {
     id: 'lv3-alberti-bass',
     level: 3,
     code: '3.1',
-    sourceRef: 'Alfred Level 3 · p.24–25',
+    sourceRef: 'Level 3 · Classical Pattern',
     titleVi: 'Kỹ Thuật Alberti Bass Cổ Điển (C – G – E – G)',
     titleEn: 'Classical Alberti Bass Pattern (C – G – E – G)',
     goalVi: 'Tập xoay cổ tay mềm mại cho mẫu tay trái `Thấp – Cao – Giữa – Cao` nổi tiếng của Mozart.',
@@ -440,7 +440,7 @@ export const LESSON_CURRICULUM: ReadonlyArray<LessonItem> = [
       return buildExerciseSong({
         id: 'lv3-alberti-bass',
         title: 'Bài 3.1 · Đệm Alberti Bass Cổ Điển',
-        composer: 'Alfred Level 3',
+        composer: 'Studio Curriculum · Level 3',
         bpm: 96,
         totalMeasures: 8,
         tonicPc: 0,
@@ -453,7 +453,7 @@ export const LESSON_CURRICULUM: ReadonlyArray<LessonItem> = [
     id: 'lv3-e-major-4sharps',
     level: 3,
     code: '3.2',
-    sourceRef: 'Alfred Level 3 · p.74–81',
+    sourceRef: 'Level 3 · 4-Sharp Keys',
     titleVi: 'Giọng Mi Trưởng (E Major · 4#) & Vòng Bậc 5',
     titleEn: 'Key of E Major (4# Sharps) & Circle of Fifths',
     goalVi: 'Chinh phục giọng 4 dấu thăng (F#, C#, G#, D#) — tông cực phổ biến trong Ballad & nhạc Anime.',
@@ -474,7 +474,7 @@ export const LESSON_CURRICULUM: ReadonlyArray<LessonItem> = [
     id: 'lv3-mode-mixture',
     level: 3,
     code: '3.3',
-    sourceRef: 'MusicTheory.pdf · Ch. 19 (Mode Mixture)',
+    sourceRef: 'Level 3 · Mode Mixture',
     titleVi: 'Hợp Âm Vay Mượn Cảm Xúc (I – IV – iv – I & bVI – bVII)',
     titleEn: 'Borrowed Chords / Mode Mixture (IV → iv → I)',
     goalVi: 'Ứng dụng hợp âm vay mượn từ giọng thứ cùng tên (Fm, Ab, Bb trong giọng C) để tạo cao trào sâu lắng.',
@@ -495,7 +495,7 @@ export const LESSON_CURRICULUM: ReadonlyArray<LessonItem> = [
     id: 'lv3-jazz-251',
     level: 3,
     code: '3.4',
-    sourceRef: 'Alfred Level 3 p.18 · MusicTheory.pdf Ch. 31',
+    sourceRef: 'Level 3 · Jazz Swing',
     titleVi: 'Jazz Sequences: Walking Bass & II–V–I (Dm7 – G7 – Cmaj7)',
     titleEn: 'Jazz Swing: Walking Bass & II–V–I Turnaround',
     goalVi: 'Tập Walking Bass 4 phách tay trái kết hợp nhả hợp âm màu 7th/9th kiểu Charleston ở tay phải.',
@@ -516,7 +516,7 @@ export const LESSON_CURRICULUM: ReadonlyArray<LessonItem> = [
     id: 'lv3-jazz-tritone',
     level: 3,
     code: '3.5',
-    sourceRef: 'MusicTheory.pdf · Ch. 31 (Tritone Sub & Lush 9ths)',
+    sourceRef: 'Level 3 · Jazz Harmony',
     titleVi: 'Jazz Ballad & Thay Thế Tam Cung (Dm7 – Db7 – Cmaj7)',
     titleEn: 'Jazz Ballad & Tritone Substitution (Dm7 – Db7 – Cmaj7)',
     goalVi: 'Thay G7 bằng Db7 (chung tam cung B–F) tạo đường bass đi bán cung D → Db → C đầy mê hoặc.',

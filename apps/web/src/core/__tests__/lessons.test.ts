@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { LESSON_CURRICULUM } from '../lessons/lessonCurriculum';
 
-describe('Alfred Level 1-3 & MusicTheory Lesson Curriculum', () => {
+describe('Piano Lesson Curriculum (Levels 1-3)', () => {
   it('provides 15 structured lessons across Levels 1, 2, and 3', () => {
     expect(LESSON_CURRICULUM).toHaveLength(15);
     expect(LESSON_CURRICULUM.filter((l) => l.level === 1)).toHaveLength(5);

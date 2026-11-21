@@ -45,18 +45,18 @@ export const LessonsTab: React.FC<LessonsTabProps> = ({ language, onStartLessonS
 
   const levelMeta: Record<LessonLevel, { titleVi: string; titleEn: string; badge: string }> = {
     1: {
-      titleVi: 'Level 1 · Nhập Môn (Alfred Lv.1)',
-      titleEn: 'Level 1 · Beginner (Alfred Lv.1)',
+      titleVi: 'Level 1 · Nhập Môn',
+      titleEn: 'Level 1 · Beginner',
       badge: 'bg-[#e1f4ea] text-[#2f9e6c]',
     },
     2: {
-      titleVi: 'Level 2 · Sơ Trung Cấp (Alfred Lv.2)',
-      titleEn: 'Level 2 · Elementary (Alfred Lv.2)',
+      titleVi: 'Level 2 · Sơ Trung Cấp',
+      titleEn: 'Level 2 · Elementary',
       badge: 'bg-[#eceefe] text-[#4f46e5]',
     },
     3: {
-      titleVi: 'Level 3 · Trung Cấp & Jazz (Alfred Lv.3 + Theory)',
-      titleEn: 'Level 3 · Intermediate & Jazz (Alfred Lv.3 + Theory)',
+      titleVi: 'Level 3 · Trung Cấp & Jazz',
+      titleEn: 'Level 3 · Intermediate & Jazz',
       badge: 'bg-[#faefdb] text-[#c0822a]',
     },
   };
@@ -75,8 +75,8 @@ export const LessonsTab: React.FC<LessonsTabProps> = ({ language, onStartLessonS
             <div className="text-xs font-bold text-[#4f46e5] uppercase tracking-wider flex items-center gap-1.5">
               <BookMarked className="w-3.5 h-3.5" />
               {isVi
-                ? 'Giáo trình tổng hợp: Alfred Adult Level 1–3 & 21st-Century Music Theory'
-                : 'Curriculum: Alfred Adult All-in-One Levels 1–3 & 21st-Century Music Theory'}
+                ? 'Lộ trình học Piano từng bước · Cơ bản → Trung cấp → Đệm hát & Jazz'
+                : 'Structured Piano Curriculum · Beginner → Elementary → Intermediate & Jazz'}
             </div>
             <div className="text-sm font-bold text-[#14151c] mt-0.5">
               {isVi
