@@ -1,4 +1,4 @@
-const CACHE_NAME = 'piano-waterfall-v1.3.25';
+const CACHE_NAME = 'piano-waterfall-v1.3.26';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -8,7 +8,7 @@ self.addEventListener('install', (event) => {
         './index.html',
         './icon.svg',
         './manifest.webmanifest',
-        './catalog/public-domain-catalog.json',
+        './catalog/public-domain-catalog.json?v=10521',
       ];
       await cache.addAll(coreAssets);
       try {
@@ -45,8 +45,13 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
-  // Network-First for HTML navigations so deployed updates reach users
-  if (req.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname.endsWith('/')) {
+  // Network-First for HTML navigations & JSON catalogs so deployed updates reach users immediately
+  if (
+    req.mode === 'navigate' ||
+    url.pathname.endsWith('.html') ||
+    url.pathname.endsWith('/') ||
+    url.pathname.endsWith('.json')
+  ) {
     event.respondWith(
       fetch(req)
         .then((res) => {

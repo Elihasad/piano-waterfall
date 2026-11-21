@@ -111,7 +111,7 @@ let cachedFullCatalog: PublicDomainCatalogEntry[] | null = null;
 export async function loadFullPublicDomainCatalog(): Promise<PublicDomainCatalogEntry[]> {
   if (cachedFullCatalog) return cachedFullCatalog;
   try {
-    const res = await fetch('./catalog/public-domain-catalog.json');
+    const res = await fetch('./catalog/public-domain-catalog.json?v=10521');
     if (!res.ok) return [...PUBLIC_DOMAIN_CATALOG];
     const rows = (await res.json()) as CompactCatalogRow[];
     cachedFullCatalog = rows.map((r) => ({
