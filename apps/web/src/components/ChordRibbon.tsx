@@ -67,28 +67,28 @@ export const ChordRibbon: React.FC<ChordRibbonProps> = ({
     : null;
 
   return (
-    <div className="w-full bg-[#151621] border-b border-[#26283a] px-2.5 py-1 flex items-center justify-between gap-2 text-xs shrink-0 overflow-x-auto no-scrollbar">
-      <div className="flex items-center gap-2.5 min-w-0">
+    <div className="w-full bg-[#f8f6f1] border-b border-[#e7e3d9] px-3 py-1.5 flex items-center justify-between gap-2 text-xs shrink-0 overflow-x-auto no-scrollbar">
+      <div className="flex items-center gap-2 min-w-0">
         {keyLabel && (
-          <span className="px-2 py-0.5 rounded-md bg-indigo-950/80 border border-indigo-500/40 text-indigo-200 font-semibold text-[11px] shrink-0">
-            {language === 'vi' ? 'Gam' : 'Key'}: {keyLabel}
+          <span className="px-2.5 py-0.5 rounded-full bg-white border border-[#e7e3d9] text-[#4a4f5e] font-semibold text-[11px] shrink-0">
+            {language === 'vi' ? 'Gam' : 'Key'}: <strong className="text-[#14151c]">{keyLabel}</strong>
           </span>
         )}
 
-        <div className="flex items-center gap-2 bg-violet-950/60 border border-violet-500/40 rounded-lg px-2.5 py-0.5 shrink-0">
-          <span className="text-[11px] text-violet-300 font-medium">
+        <div className="flex items-center gap-2 bg-[#eceefe] border border-[#4f46e5]/30 rounded-full px-3 py-0.5 shrink-0">
+          <span className="text-[11px] text-[#4f46e5] font-semibold font-mono">
             M{current.measureNumber}
           </span>
-          <span className="text-sm font-extrabold text-white tracking-tight">
+          <span className="text-sm font-extrabold text-[#14151c] tracking-tight">
             {currentSymbol}
           </span>
-          <span className="text-[11px] text-cyan-300 font-mono">{currentToneNames}</span>
+          <span className="text-[11px] text-[#4f46e5] font-mono font-semibold">{currentToneNames}</span>
         </div>
 
         {nextSymbol && (
-          <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-slate-400 shrink-0">
+          <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-[#888d9c] shrink-0">
             <span>→</span>
-            <span className="px-1.5 py-0.5 rounded bg-[#212331] text-slate-200 font-semibold">
+            <span className="px-2 py-0.5 rounded-full bg-white border border-[#e7e3d9] text-[#14151c] font-semibold">
               {nextSymbol}
             </span>
           </div>
@@ -97,7 +97,7 @@ export const ChordRibbon: React.FC<ChordRibbonProps> = ({
 
       <div className="flex items-center gap-1.5 shrink-0">
         {activeStyleLabel && isAccompanimentActive && (
-          <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-950/60 border border-emerald-500/35 text-emerald-300 text-[11px] font-medium">
+          <span className="hidden md:inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#e1f4ea] text-[#2f9e6c] text-[11px] font-semibold">
             <Sparkles className="w-3 h-3" />
             {activeStyleLabel}
           </span>
@@ -105,7 +105,7 @@ export const ChordRibbon: React.FC<ChordRibbonProps> = ({
         <button
           type="button"
           onClick={onOpenStudio}
-          className="px-2 py-0.5 rounded-md bg-violet-600/25 hover:bg-violet-600/40 border border-violet-500/40 text-violet-200 text-[11px] font-semibold inline-flex items-center gap-1"
+          className="px-2.5 py-0.5 rounded-full bg-white hover:bg-[#eceefe] border border-[#e7e3d9] text-[#4f46e5] text-[11px] font-semibold inline-flex items-center gap-1 transition"
         >
           <Music2 className="w-3 h-3" />
           {language === 'vi' ? 'Đổi Style' : 'Style'}
@@ -114,7 +114,7 @@ export const ChordRibbon: React.FC<ChordRibbonProps> = ({
           <button
             type="button"
             onClick={onReturnOriginal}
-            className="px-2 py-0.5 rounded-md bg-[#242632] hover:bg-[#2f3242] text-slate-200 text-[11px] font-semibold inline-flex items-center gap-1"
+            className="px-2.5 py-0.5 rounded-full bg-[#14151c] hover:bg-[#2a2d3d] text-white text-[11px] font-semibold inline-flex items-center gap-1"
           >
             <RotateCcw className="w-3 h-3" />
             {language === 'vi' ? 'Bản gốc' : 'Original'}

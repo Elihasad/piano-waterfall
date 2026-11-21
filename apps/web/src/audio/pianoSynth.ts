@@ -7,6 +7,7 @@ export interface NotePlayer {
   getPreset(): SoundPreset;
   getAudioTime?(): number | null;
   playNote(midi: number, durationSec: number, velocity?: number, startAtAudioTime?: number): void;
+  playMetronomeClick?(accent: boolean, startAtAudioTime?: number): void;
   stopAll(): void;
 }
 
@@ -196,6 +197,26 @@ export class PianoSynth implements NotePlayer {
   getAudioTime(): number | null {
     const ctx = this.ensureContext();
     return ctx ? ctx.currentTime : null;
+  }
+
+  playMetronomeClick(accent: boolean, startAtAudioTime?: number): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') {
+      void ctx.resume();
+    }
+    const now = startAtAudioTime ?? ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(accent ? 1120 : 800, now);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.linearRampToValueAtTime(accent ? 0.24 : 0.14, now + 0.003);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.045);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.05);
   }
 
   async unlock(): Promise<void> {

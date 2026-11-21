@@ -21,6 +21,9 @@ import {
   Piano,
   Usb,
   BookOpen,
+  Compass,
+  GraduationCap,
+  Bell,
 } from 'lucide-react';
 import { t } from '../core/i18n';
 import { midiToNoteLabel } from '../core/noteNames';
@@ -43,6 +46,7 @@ interface TopBarProps {
   loopEnabled: boolean;
   loopStartMeasure: number;
   loopEndMeasure: number;
+  metronomeEnabled?: boolean;
   practiceMode: PracticeMode;
   waitingMidis: number[];
   midiDevices: string[];
@@ -65,8 +69,11 @@ interface TopBarProps {
   onCycleNoteLabelMode: () => void;
   onToggleEffects: () => void;
   onToggleFullKeyboard: () => void;
+  onToggleMetronome?: () => void;
+  onOpenPracticePath?: () => void;
   onOpenAccompaniment?: () => void;
   onOpenTheory?: () => void;
+  onOpenQuiz?: () => void;
   onOpenLibrary: () => void;
   onOpenSettings: () => void;
 }
@@ -88,6 +95,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   loopEnabled,
   loopStartMeasure,
   loopEndMeasure,
+  metronomeEnabled = false,
   practiceMode,
   waitingMidis,
   midiDevices,
@@ -110,8 +118,11 @@ export const TopBar: React.FC<TopBarProps> = ({
   onCycleNoteLabelMode,
   onToggleEffects,
   onToggleFullKeyboard,
+  onToggleMetronome,
+  onOpenPracticePath,
   onOpenAccompaniment,
   onOpenTheory,
+  onOpenQuiz,
   onOpenLibrary,
   onOpenSettings,
 }) => {
@@ -143,18 +154,18 @@ export const TopBar: React.FC<TopBarProps> = ({
   const midiConnected = midiDevices.length > 0;
 
   return (
-    <header className="relative z-20 bg-[#1a1b22] border-b border-[#2c2e3b] px-2 pt-1.5 pb-1 select-none">
-      {/* Row 1: Primary Transport + Controls */}
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+    <header className="relative z-20 bg-white border-b border-[#e7e3d9] px-2.5 pt-2 pb-1.5 select-none text-[#14151c]">
+      {/* Row 1: MuseKey Warm-Paper Studio Transport + Controls */}
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1.5">
         {/* Library & Song title */}
         <button
           type="button"
           onClick={onOpenLibrary}
           aria-label={t(language, 'libraryBtn')}
-          className="flex items-center gap-1.5 px-2.5 h-9 rounded-lg bg-[#242632] hover:bg-[#2f3242] active:scale-95 text-slate-100 shrink-0 transition"
+          className="flex items-center gap-1.5 px-3 h-9 rounded-full bg-[#f8f6f1] hover:bg-[#edeae2] border border-[#e7e3d9] active:scale-95 text-[#14151c] shrink-0 transition"
         >
-          <Library className="w-4 h-4 text-violet-400" />
-          <span className="text-xs font-semibold max-w-[100px] sm:max-w-[150px] truncate">
+          <Library className="w-4 h-4 text-[#4f46e5]" />
+          <span className="text-xs font-bold max-w-[110px] sm:max-w-[160px] truncate">
             {song.title}
           </span>
         </button>
@@ -165,15 +176,15 @@ export const TopBar: React.FC<TopBarProps> = ({
             type="button"
             onClick={onRestart}
             aria-label={t(language, 'restart')}
-            className="w-9 h-9 flex items-center justify-center rounded-lg bg-[#242632] hover:bg-[#2f3242] active:scale-95 text-slate-200"
+            className="w-8 h-9 flex items-center justify-center rounded-full bg-[#f8f6f1] hover:bg-[#edeae2] border border-[#e7e3d9] active:scale-95 text-[#4a4f5e]"
           >
-            <SkipBack className="w-4 h-4" />
+            <SkipBack className="w-3.5 h-3.5" />
           </button>
           <button
             type="button"
             onClick={() => onStepMeasure(-1)}
             aria-label={t(language, 'prevMeasure')}
-            className="w-9 h-9 flex items-center justify-center rounded-lg bg-[#242632] hover:bg-[#2f3242] active:scale-95 text-slate-200"
+            className="w-8 h-9 flex items-center justify-center rounded-full bg-[#f8f6f1] hover:bg-[#edeae2] border border-[#e7e3d9] active:scale-95 text-[#4a4f5e]"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
@@ -181,32 +192,46 @@ export const TopBar: React.FC<TopBarProps> = ({
             type="button"
             onClick={onTogglePlay}
             aria-label={isPlaying ? t(language, 'pause') : t(language, 'play')}
-            className="w-10 h-9 flex items-center justify-center rounded-lg bg-violet-600 hover:bg-violet-500 active:scale-95 text-white shadow"
+            className="w-10 h-9 flex items-center justify-center rounded-full bg-[#14151c] hover:bg-[#2a2d3d] active:scale-95 text-white shadow-sm"
           >
-            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
+            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5 fill-current" />}
           </button>
           <button
             type="button"
             onClick={() => onStepMeasure(1)}
             aria-label={t(language, 'nextMeasure')}
-            className="w-9 h-9 flex items-center justify-center rounded-lg bg-[#242632] hover:bg-[#2f3242] active:scale-95 text-slate-200"
+            className="w-8 h-9 flex items-center justify-center rounded-full bg-[#f8f6f1] hover:bg-[#edeae2] border border-[#e7e3d9] active:scale-95 text-[#4a4f5e]"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Practice Path (MuseKey 4-Bar Drawer) */}
+        {onOpenPracticePath && (
+          <button
+            type="button"
+            onClick={onOpenPracticePath}
+            aria-label={language === 'vi' ? 'Lộ trình 4 ô nhịp' : 'Practice Path'}
+            className="flex items-center gap-1 px-2.5 h-9 rounded-full text-xs font-bold shrink-0 text-white shadow-sm transition"
+            style={{ background: 'linear-gradient(135deg, #0f766e 0%, #4338ca 100%)' }}
+          >
+            <Compass className="w-3.5 h-3.5" />
+            <span>{language === 'vi' ? 'Lộ trình' : 'Path'}</span>
+          </button>
+        )}
 
         {/* Practice Mode: Listen vs Wait (MIDI) */}
         <button
           type="button"
           onClick={() => onPracticeModeChange(practiceMode === 'listen' ? 'wait' : 'listen')}
           aria-label={t(language, 'practiceMode')}
-          className={`flex items-center gap-1 px-2.5 h-9 rounded-lg text-xs font-semibold shrink-0 transition ${
+          className={`flex items-center gap-1 px-2.5 h-9 rounded-full text-xs font-semibold shrink-0 border transition ${
             practiceMode === 'wait'
-              ? 'bg-amber-500/25 text-amber-300 border border-amber-400/60'
-              : 'bg-[#242632] text-slate-300 hover:bg-[#2f3242]'
+              ? 'bg-[#faefdb] text-[#c0822a] border-[#c0822a]/50'
+              : 'bg-[#f8f6f1] text-[#4a4f5e] border-[#e7e3d9] hover:bg-[#edeae2]'
           }`}
         >
-          <Usb className={`w-3.5 h-3.5 ${midiConnected ? 'text-emerald-400' : 'text-slate-400'}`} />
+          <Usb className={`w-3.5 h-3.5 ${midiConnected ? 'text-[#2f9e6c]' : 'text-[#888d9c]'}`} />
           <span>{practiceMode === 'wait' ? t(language, 'modeWait') : t(language, 'modeListen')}</span>
         </button>
 
@@ -215,31 +240,48 @@ export const TopBar: React.FC<TopBarProps> = ({
           type="button"
           onClick={() => setOpenPopover(openPopover === 'loop' ? null : 'loop')}
           aria-label={t(language, 'loopAB')}
-          className={`flex items-center gap-1 px-2 h-9 rounded-lg text-xs font-medium shrink-0 transition ${
+          className={`flex items-center gap-1 px-2.5 h-9 rounded-full text-xs font-semibold shrink-0 border transition ${
             loopEnabled
-              ? 'bg-violet-600/30 text-violet-300 border border-violet-500/60'
-              : 'bg-[#242632] text-slate-300 hover:bg-[#2f3242]'
+              ? 'bg-[#eceefe] text-[#4f46e5] border-[#4f46e5]/40'
+              : 'bg-[#f8f6f1] text-[#4a4f5e] border-[#e7e3d9] hover:bg-[#edeae2]'
           }`}
         >
           <Repeat className="w-3.5 h-3.5" />
           <span>{loopEnabled ? `${loopStartMeasure}-${loopEndMeasure}` : 'A-B'}</span>
         </button>
 
+        {/* Metronome (M) */}
+        {onToggleMetronome && (
+          <button
+            type="button"
+            onClick={onToggleMetronome}
+            aria-label={language === 'vi' ? 'Máy đếm nhịp' : 'Metronome'}
+            className={`w-9 h-9 flex items-center justify-center rounded-full border shrink-0 transition ${
+              metronomeEnabled
+                ? 'bg-[#eceefe] text-[#4f46e5] border-[#4f46e5]/40'
+                : 'bg-[#f8f6f1] text-[#4a4f5e] border-[#e7e3d9] hover:bg-[#edeae2]'
+            }`}
+            title={language === 'vi' ? 'Máy đếm nhịp (M)' : 'Metronome (M)'}
+          >
+            <Bell className="w-3.5 h-3.5" />
+          </button>
+        )}
+
         {/* BPM Control */}
-        <div className="flex items-center gap-1 bg-[#242632] rounded-lg px-1.5 h-9 shrink-0">
-          <span className="text-[10px] text-slate-400 font-semibold px-0.5">{t(language, 'bpm')}</span>
+        <div className="flex items-center gap-0.5 bg-[#f8f6f1] border border-[#e7e3d9] rounded-full px-2 h-9 shrink-0">
+          <span className="text-[10px] text-[#888d9c] font-semibold px-0.5">{t(language, 'bpm')}</span>
           <button
             type="button"
             onClick={() => onSpeedChange(Math.max(0.25, +(speedRatio - 0.1).toFixed(2)))}
             aria-label={t(language, 'decreaseSpeed')}
-            className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#323546] text-slate-200"
+            className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#edeae2] text-[#4a4f5e]"
           >
             <Minus className="w-3 h-3" />
           </button>
           <button
             type="button"
             onClick={() => onSpeedChange(speedRatio === 1 ? 0.7 : speedRatio === 0.7 ? 0.5 : 1)}
-            className="text-xs font-bold text-slate-100 min-w-[38px] text-center"
+            className="text-xs font-bold font-mono text-[#14151c] min-w-[34px] text-center"
           >
             {effectiveBpm}
           </button>
@@ -247,40 +289,52 @@ export const TopBar: React.FC<TopBarProps> = ({
             type="button"
             onClick={() => onSpeedChange(Math.min(2.0, +(speedRatio + 0.1).toFixed(2)))}
             aria-label={t(language, 'increaseSpeed')}
-            className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#323546] text-slate-200"
+            className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#edeae2] text-[#4a4f5e]"
           >
             <Plus className="w-3 h-3" />
           </button>
         </div>
 
-        {/* Sound Preset Popover Trigger */}
-        {/* Accompaniment / Chords Studio */}
+        {/* Accompaniment / Arrange */}
         {onOpenAccompaniment && (
           <button
             type="button"
             onClick={onOpenAccompaniment}
             aria-label={language === 'vi' ? 'Đệm Hát & Gam' : 'Accompaniment & Chords'}
-            className={`flex items-center gap-1 px-2.5 h-9 rounded-lg text-xs font-bold shrink-0 transition ${
+            className={`flex items-center gap-1 px-2.5 h-9 rounded-full text-xs font-bold shrink-0 border transition ${
               isAccompanimentActive
-                ? 'bg-violet-600 text-white shadow-sm shadow-violet-600/40'
-                : 'bg-violet-950/60 border border-violet-500/40 text-violet-200 hover:bg-violet-900/50'
+                ? 'bg-[#4f46e5] text-white border-[#4f46e5]'
+                : 'bg-[#eceefe] text-[#4f46e5] border-[#4f46e5]/30 hover:bg-[#dfe2fd]'
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>{language === 'vi' ? 'Đệm Hát' : 'Chords'}</span>
+            <span>{language === 'vi' ? 'Đệm Hát' : 'Arrange'}</span>
           </button>
         )}
 
-        {/* Pure Theory Guide Tab */}
+        {/* Theory Guide */}
         {onOpenTheory && (
           <button
             type="button"
             onClick={onOpenTheory}
             aria-label={language === 'vi' ? 'Hướng dẫn Lý thuyết Đệm Hát' : 'Piano Accompaniment Theory Guide'}
-            className="flex items-center gap-1 px-2.5 h-9 rounded-lg text-xs font-bold shrink-0 bg-cyan-950/60 border border-cyan-500/40 text-cyan-200 hover:bg-cyan-900/50 transition"
+            className="flex items-center gap-1 px-2.5 h-9 rounded-full text-xs font-bold shrink-0 bg-[#e1f4ea] border border-[#2f9e6c]/30 text-[#2f9e6c] hover:bg-[#d0edd9] transition"
           >
             <BookOpen className="w-3.5 h-3.5" />
             <span>{language === 'vi' ? 'Lý thuyết' : 'Theory'}</span>
+          </button>
+        )}
+
+        {/* Contextual Note Reading Quiz */}
+        {onOpenQuiz && (
+          <button
+            type="button"
+            onClick={onOpenQuiz}
+            aria-label={language === 'vi' ? 'Đọc nốt' : 'Note Quiz'}
+            className="flex items-center gap-1 px-2.5 h-9 rounded-full text-xs font-semibold shrink-0 bg-[#f8f6f1] border border-[#e7e3d9] text-[#4a4f5e] hover:bg-[#edeae2] transition"
+          >
+            <GraduationCap className="w-3.5 h-3.5 text-[#4f46e5]" />
+            <span className="hidden lg:inline">{language === 'vi' ? 'Đọc nốt' : 'Quiz'}</span>
           </button>
         )}
 
@@ -288,13 +342,13 @@ export const TopBar: React.FC<TopBarProps> = ({
           type="button"
           onClick={() => setOpenPopover(openPopover === 'sound' ? null : 'sound')}
           aria-label={t(language, 'soundPreset')}
-          className={`flex items-center gap-1 px-2 h-9 rounded-lg text-xs font-medium shrink-0 ${
+          className={`flex items-center gap-1 px-2.5 h-9 rounded-full text-xs font-semibold shrink-0 border ${
             openPopover === 'sound'
-              ? 'bg-violet-600/30 text-violet-200 border border-violet-500/50'
-              : 'bg-[#242632] text-slate-200 hover:bg-[#2f3242]'
+              ? 'bg-[#eceefe] text-[#4f46e5] border-[#4f46e5]/40'
+              : 'bg-[#f8f6f1] text-[#4a4f5e] border-[#e7e3d9] hover:bg-[#edeae2]'
           }`}
         >
-          <Piano className="w-3.5 h-3.5 text-violet-300" />
+          <Piano className="w-3.5 h-3.5 text-[#4f46e5]" />
           <span>{soundShortLabel}</span>
         </button>
 
@@ -303,19 +357,19 @@ export const TopBar: React.FC<TopBarProps> = ({
           type="button"
           onClick={() => setOpenPopover(openPopover === 'hands' ? null : 'hands')}
           aria-label={t(language, 'handsTitle')}
-          className={`flex items-center gap-1.5 px-2.5 h-9 rounded-lg text-xs font-medium shrink-0 transition ${
+          className={`flex items-center gap-1.5 px-2.5 h-9 rounded-full text-xs font-semibold shrink-0 border transition ${
             openPopover === 'hands'
-              ? 'bg-cyan-600/30 text-cyan-200 border border-cyan-500/50'
-              : 'bg-[#242632] text-slate-200 hover:bg-[#2f3242]'
+              ? 'bg-[#eceefe] text-[#4f46e5] border-[#4f46e5]/40'
+              : 'bg-[#f8f6f1] text-[#4a4f5e] border-[#e7e3d9] hover:bg-[#edeae2]'
           }`}
         >
           <Sliders className="w-3.5 h-3.5" />
           <span className="inline-flex items-center gap-1">
             <span
-              className={`w-2 h-2 rounded-full ${hands.left.visual ? 'bg-green-400' : 'bg-slate-600'}`}
+              className={`w-2 h-2 rounded-full ${hands.left.visual ? 'bg-[#34b8a2]' : 'bg-[#d0ccc2]'}`}
             />
             <span
-              className={`w-2 h-2 rounded-full ${hands.right.visual ? 'bg-cyan-400' : 'bg-slate-600'}`}
+              className={`w-2 h-2 rounded-full ${hands.right.visual ? 'bg-[#7a93ff]' : 'bg-[#d0ccc2]'}`}
             />
           </span>
         </button>
@@ -325,30 +379,30 @@ export const TopBar: React.FC<TopBarProps> = ({
           type="button"
           onClick={onCycleNoteLabelMode}
           aria-label={t(language, 'noteLabels')}
-          className="px-2.5 h-9 rounded-lg bg-[#242632] hover:bg-[#2f3242] text-xs font-bold text-cyan-300 shrink-0"
+          className="px-2.5 h-9 rounded-full bg-[#f8f6f1] hover:bg-[#edeae2] border border-[#e7e3d9] text-xs font-bold text-[#4f46e5] shrink-0"
         >
           {labelButtonText}
         </button>
 
         {/* Transpose */}
-        <div className="flex items-center gap-0.5 bg-[#242632] rounded-lg px-1.5 h-9 shrink-0">
-          <span className="text-[10px] text-slate-400 font-semibold">{t(language, 'tone')}</span>
+        <div className="flex items-center gap-0.5 bg-[#f8f6f1] border border-[#e7e3d9] rounded-full px-2 h-9 shrink-0">
+          <span className="text-[10px] text-[#888d9c] font-semibold">{t(language, 'tone')}</span>
           <button
             type="button"
             onClick={() => onTransposeChange(transpose - 1)}
             aria-label={t(language, 'decreaseTone')}
-            className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#323546]"
+            className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#edeae2]"
           >
             <Minus className="w-3 h-3" />
           </button>
-          <span className="text-xs font-semibold min-w-[22px] text-center">
+          <span className="text-xs font-bold font-mono min-w-[22px] text-center">
             {transpose > 0 ? `+${transpose}` : transpose}
           </span>
           <button
             type="button"
             onClick={() => onTransposeChange(transpose + 1)}
             aria-label={t(language, 'increaseTone')}
-            className="w-6 h-6 flex items-center justify-center rounded hover:bg-[#323546]"
+            className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#edeae2]"
           >
             <Plus className="w-3 h-3" />
           </button>
@@ -359,10 +413,10 @@ export const TopBar: React.FC<TopBarProps> = ({
           type="button"
           onClick={onToggleEffects}
           aria-label={t(language, 'effects')}
-          className={`flex items-center gap-1 px-2 h-9 rounded-lg text-xs shrink-0 ${
+          className={`flex items-center gap-1 px-2.5 h-9 rounded-full text-xs border shrink-0 ${
             effectsEnabled
-              ? 'bg-emerald-600/25 text-emerald-300 border border-emerald-500/40'
-              : 'bg-[#242632] text-slate-400'
+              ? 'bg-[#e1f4ea] text-[#2f9e6c] border-[#2f9e6c]/40'
+              : 'bg-[#f8f6f1] text-[#888d9c] border-[#e7e3d9]'
           }`}
         >
           <Sparkles className="w-3.5 h-3.5" />
@@ -373,7 +427,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           type="button"
           onClick={onToggleFullKeyboard}
           aria-label={t(language, 'keyboardZoom')}
-          className="flex items-center gap-1 px-2 h-9 rounded-lg bg-[#242632] hover:bg-[#2f3242] text-xs text-slate-200 shrink-0"
+          className="flex items-center gap-1 px-2.5 h-9 rounded-full bg-[#f8f6f1] hover:bg-[#edeae2] border border-[#e7e3d9] text-xs font-semibold text-[#4a4f5e] shrink-0"
         >
           {fullKeyboard ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
           <span>{fullKeyboard ? t(language, 'full88') : t(language, 'autoZoom')}</span>
@@ -384,7 +438,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           type="button"
           onClick={onOpenSettings}
           aria-label={t(language, 'settingsTitle')}
-          className="w-9 h-9 flex items-center justify-center rounded-lg bg-[#242632] hover:bg-[#2f3242] text-slate-300 shrink-0"
+          className="w-9 h-9 flex items-center justify-center rounded-full bg-[#f8f6f1] hover:bg-[#edeae2] border border-[#e7e3d9] text-[#4a4f5e] shrink-0"
         >
           <Settings className="w-4 h-4" />
         </button>

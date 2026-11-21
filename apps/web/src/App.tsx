@@ -3,11 +3,15 @@ import { RotateCw } from 'lucide-react';
 import { MidiInputManager, type MidiDeviceState } from './audio/midiInput';
 import { PianoSynth } from './audio/pianoSynth';
 import { PlaybackClock, type PlaybackSnapshot } from './audio/playbackClock';
-import { AccompanimentModal } from './components/AccompanimentModal';
+import { AppShell, type AppView } from './components/AppShell';
+import { ArrangeView } from './components/ArrangeView';
 import { ChordRibbon } from './components/ChordRibbon';
-import { LibraryModal } from './components/LibraryModal';
+import { LibraryView } from './components/LibraryView';
+import { NoteQuizView } from './components/NoteQuizView';
 import { PianoStage } from './components/PianoStage';
+import { PracticePathDrawer, type PracticeStepConfig } from './components/PracticePathDrawer';
 import { SettingsModal } from './components/SettingsModal';
+import { TheoryView } from './components/TheoryView';
 import { TopBar } from './components/TopBar';
 import { ACCOMPANIMENT_STYLES } from './core/accompaniment/accompanimentGenerator';
 import { analyzeSongHarmony } from './core/accompaniment/harmonyAnalyzer';
@@ -36,6 +40,7 @@ export default function App() {
   const player = useMemo(() => new PianoSynth(), []);
   const clock = useMemo(() => new PlaybackClock(player), [player]);
 
+  const [activeView, setActiveView] = useState<AppView>('player');
   const [songs, setSongs] = useState<Song[]>(DEMO_SONGS);
   const [originalSong, setOriginalSong] = useState<Song>(DEMO_SONGS[0]);
   const [accompanimentSong, setAccompanimentSong] = useState<Song | null>(null);
@@ -48,9 +53,7 @@ export default function App() {
     return loaded;
   });
   const [fullKeyboard, setFullKeyboard] = useState(false);
-  const [showLibrary, setShowLibrary] = useState(false);
-  const [showAccompaniment, setShowAccompaniment] = useState(false);
-  const [accompanimentTab, setAccompanimentTab] = useState<'practice' | 'theory'>('practice');
+  const [showPracticePath, setShowPracticePath] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [isPortraitMobile, setIsPortraitMobile] = useState(false);
   const [midiState, setMidiState] = useState<MidiDeviceState>({
@@ -122,6 +125,7 @@ export default function App() {
       setAccompanimentSong(null);
       clock.loadSong(song);
       setSnapshot(clock.getSnapshot());
+      setActiveView('player');
     },
     [clock],
   );
@@ -133,6 +137,7 @@ export default function App() {
       clock.loadSong(accSong);
       clock.play();
       setSnapshot(clock.getSnapshot());
+      setActiveView('player');
     },
     [clock],
   );
@@ -165,11 +170,11 @@ export default function App() {
       await deleteSong(id);
       const next = songs.filter((s) => s.id !== id);
       setSongs(next);
-      if (currentSong.id === id && next.length > 0) {
+      if (originalSong.id === id && next.length > 0) {
         selectSong(next[0]);
       }
     },
-    [songs, currentSong.id, selectSong],
+    [songs, originalSong.id, selectSong],
   );
 
   const handleUpdateSettings = useCallback(
@@ -183,25 +188,11 @@ export default function App() {
     [player],
   );
 
-  const handleSoundPresetChange = useCallback(
-    (preset: SoundPreset) => {
-      handleUpdateSettings({ soundPreset: preset });
-    },
-    [handleUpdateSettings],
-  );
-
-  const handlePracticeModeChange = useCallback(
-    (mode: PracticeMode) => {
-      clock.setPracticeMode(mode);
-      setSnapshot(clock.getSnapshot());
-    },
-    [clock],
-  );
-
   const handleTogglePlay = useCallback(() => {
+    void player.unlock();
     clock.togglePlay();
     setSnapshot(clock.getSnapshot());
-  }, [clock]);
+  }, [clock, player]);
 
   const handleRestart = useCallback(() => {
     clock.restart();
@@ -217,8 +208,8 @@ export default function App() {
   );
 
   const handleSeek = useCallback(
-    (timeSec: number) => {
-      clock.seek(timeSec);
+    (sec: number) => {
+      clock.seek(sec);
       setSnapshot(clock.getSnapshot());
     },
     [clock],
@@ -240,6 +231,21 @@ export default function App() {
     [clock],
   );
 
+  const handlePracticeModeChange = useCallback(
+    (mode: PracticeMode) => {
+      clock.setPracticeMode(mode);
+      setSnapshot(clock.getSnapshot());
+    },
+    [clock],
+  );
+
+  const handleSoundPresetChange = useCallback(
+    (preset: SoundPreset) => {
+      handleUpdateSettings({ soundPreset: preset });
+    },
+    [handleUpdateSettings],
+  );
+
   const handleLoopChange = useCallback(
     (enabled: boolean, start?: number, end?: number) => {
       clock.setLoop(enabled, start, end);
@@ -256,16 +262,37 @@ export default function App() {
     [clock],
   );
 
+  const handleToggleMetronome = useCallback(() => {
+    const next = !clock.getSnapshot().metronomeEnabled;
+    clock.setMetronome(next);
+    setSnapshot(clock.getSnapshot());
+  }, [clock]);
+
+  const handleApplyPracticeStep = useCallback(
+    (cfg: PracticeStepConfig) => {
+      clock.setLoop(cfg.loopEnabled, cfg.startMeasure, cfg.endMeasure);
+      clock.setSpeedRatio(cfg.speedRatio);
+      clock.setHands(cfg.hands);
+      clock.setPracticeMode(cfg.practiceMode);
+      const startMeasureObj = currentSong.measures[cfg.startMeasure - 1];
+      clock.seek(startMeasureObj ? startMeasureObj.startTimeSec : 0);
+      void player.unlock();
+      clock.play();
+      setSnapshot(clock.getSnapshot());
+    },
+    [clock, currentSong.measures, player],
+  );
+
   const handleCycleNoteLabelMode = useCallback(() => {
     const idx = LABEL_CYCLE.indexOf(settings.noteLabelMode);
     const nextMode = LABEL_CYCLE[(idx + 1) % LABEL_CYCLE.length];
     handleUpdateSettings({ noteLabelMode: nextMode });
   }, [settings.noteLabelMode, handleUpdateSettings]);
 
-  // Desktop keyboard shortcuts
+  // Desktop keyboard shortcuts (active in Player view)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (showLibrary || showSettings || showAccompaniment) return;
+      if (activeView !== 'player' || showSettings || showPracticePath) return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
@@ -283,129 +310,182 @@ export default function App() {
       } else if (e.key.toLowerCase() === 'l') {
         const s = clock.getSnapshot();
         handleLoopChange(!s.loopEnabled, s.loopStartMeasure, s.loopEndMeasure);
+      } else if (e.key.toLowerCase() === 'm') {
+        handleToggleMetronome();
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
-    showLibrary,
+    activeView,
     showSettings,
-    showAccompaniment,
+    showPracticePath,
     clock,
     handleTogglePlay,
     handleStepMeasure,
     handleRestart,
     handleLoopChange,
+    handleToggleMetronome,
   ]);
 
   return (
-    <div className="flex flex-col w-full h-full bg-[#121216] text-slate-100">
-      <TopBar
-        language={settings.language}
-        song={currentSong}
-        isPlaying={snapshot.isPlaying}
-        currentTimeSec={snapshot.currentTimeSec}
-        speedRatio={snapshot.speedRatio}
-        transpose={snapshot.transpose}
-        loopEnabled={snapshot.loopEnabled}
-        loopStartMeasure={snapshot.loopStartMeasure}
-        loopEndMeasure={snapshot.loopEndMeasure}
-        practiceMode={snapshot.practiceMode}
-        waitingMidis={snapshot.waitingMidis}
-        midiDevices={midiState.connectedNames}
-        soundPreset={settings.soundPreset}
-        hands={snapshot.hands}
-        noteLabelMode={settings.noteLabelMode}
-        effectsEnabled={settings.effectsEnabled}
-        fullKeyboard={fullKeyboard}
-        isAccompanimentActive={Boolean(accompanimentSong)}
-        onTogglePlay={handleTogglePlay}
-        onRestart={handleRestart}
-        onStepMeasure={handleStepMeasure}
-        onSeek={handleSeek}
-        onSpeedChange={handleSpeedChange}
-        onTransposeChange={handleTransposeChange}
-        onLoopChange={handleLoopChange}
-        onPracticeModeChange={handlePracticeModeChange}
-        onSoundPresetChange={handleSoundPresetChange}
-        onHandsChange={handleHandsChange}
-        onCycleNoteLabelMode={handleCycleNoteLabelMode}
-        onToggleEffects={() => handleUpdateSettings({ effectsEnabled: !settings.effectsEnabled })}
-        onToggleFullKeyboard={() => setFullKeyboard((v) => !v)}
-        onOpenAccompaniment={() => {
-          setAccompanimentTab('practice');
-          setShowAccompaniment(true);
-        }}
-        onOpenTheory={() => {
-          setAccompanimentTab('theory');
-          setShowAccompaniment(true);
-        }}
-        onOpenLibrary={() => setShowLibrary(true)}
-        onOpenSettings={() => setShowSettings(true)}
-      />
+    <AppShell
+      activeView={activeView}
+      language={settings.language}
+      midiDevices={midiState.connectedNames}
+      onNavigate={(view) => {
+        if (view !== 'player' && snapshot.isPlaying) {
+          clock.pause();
+          setSnapshot(clock.getSnapshot());
+        }
+        setActiveView(view);
+      }}
+      onToggleLanguage={() =>
+        handleUpdateSettings({ language: settings.language === 'en' ? 'vi' : 'en' })
+      }
+      onOpenSettings={() => setShowSettings(true)}
+    >
+      {activeView === 'player' && (
+        <div className="flex flex-col w-full h-full bg-[#0c0e16]">
+          <TopBar
+            language={settings.language}
+            song={currentSong}
+            isPlaying={snapshot.isPlaying}
+            currentTimeSec={snapshot.currentTimeSec}
+            speedRatio={snapshot.speedRatio}
+            transpose={snapshot.transpose}
+            loopEnabled={snapshot.loopEnabled}
+            loopStartMeasure={snapshot.loopStartMeasure}
+            loopEndMeasure={snapshot.loopEndMeasure}
+            metronomeEnabled={snapshot.metronomeEnabled}
+            practiceMode={snapshot.practiceMode}
+            waitingMidis={snapshot.waitingMidis}
+            midiDevices={midiState.connectedNames}
+            soundPreset={settings.soundPreset}
+            hands={snapshot.hands}
+            noteLabelMode={settings.noteLabelMode}
+            effectsEnabled={settings.effectsEnabled}
+            fullKeyboard={fullKeyboard}
+            isAccompanimentActive={Boolean(accompanimentSong)}
+            onTogglePlay={handleTogglePlay}
+            onRestart={handleRestart}
+            onStepMeasure={handleStepMeasure}
+            onSeek={handleSeek}
+            onSpeedChange={handleSpeedChange}
+            onTransposeChange={handleTransposeChange}
+            onLoopChange={handleLoopChange}
+            onPracticeModeChange={handlePracticeModeChange}
+            onSoundPresetChange={handleSoundPresetChange}
+            onHandsChange={handleHandsChange}
+            onCycleNoteLabelMode={handleCycleNoteLabelMode}
+            onToggleEffects={() =>
+              handleUpdateSettings({ effectsEnabled: !settings.effectsEnabled })
+            }
+            onToggleFullKeyboard={() => setFullKeyboard((v) => !v)}
+            onToggleMetronome={handleToggleMetronome}
+            onOpenPracticePath={() => setShowPracticePath(true)}
+            onOpenAccompaniment={() => setActiveView('arrange')}
+            onOpenTheory={() => setActiveView('theory')}
+            onOpenQuiz={() => setActiveView('quiz')}
+            onOpenLibrary={() => setActiveView('library')}
+            onOpenSettings={() => setShowSettings(true)}
+          />
 
-      {isPortraitMobile && (
-        <div className="bg-violet-950/70 border-b border-violet-500/40 px-3 py-1.5 text-[11px] text-violet-200 flex items-center justify-center gap-1.5">
-          <RotateCw className="w-3.5 h-3.5" />
-          <span>{t(settings.language, 'portraitHint')}</span>
+          {isPortraitMobile && (
+            <div className="bg-[#eceefe] border-b border-[#4f46e5]/30 px-3 py-1.5 text-[11px] text-[#4f46e5] font-medium flex items-center justify-center gap-1.5">
+              <RotateCw className="w-3.5 h-3.5" />
+              <span>{t(settings.language, 'portraitHint')}</span>
+            </div>
+          )}
+
+          <ChordRibbon
+            language={settings.language}
+            detectedKey={liveHarmony.key}
+            chords={liveHarmony.chords}
+            currentTimeSec={snapshot.currentTimeSec}
+            transpose={snapshot.transpose}
+            noteLabelMode={settings.noteLabelMode}
+            isAccompanimentActive={Boolean(accompanimentSong)}
+            activeStyleLabel={
+              activeStyleMeta
+                ? settings.language === 'vi'
+                  ? activeStyleMeta.nameVi
+                  : activeStyleMeta.nameEn
+                : undefined
+            }
+            onOpenStudio={() => setActiveView('arrange')}
+            onReturnOriginal={handleReturnOriginal}
+          />
+
+          <PianoStage
+            song={currentSong}
+            clock={clock}
+            player={player}
+            transpose={snapshot.transpose}
+            noteLabelMode={settings.noteLabelMode}
+            showKeyLabels={settings.showKeyLabels}
+            effectsEnabled={settings.effectsEnabled}
+            fullKeyboard={fullKeyboard}
+            externalPressedMidis={externalPressedRef.current}
+            onSnapshotTick={setSnapshot}
+          />
+
+          {showPracticePath && (
+            <PracticePathDrawer
+              language={settings.language}
+              song={currentSong}
+              onApplyStep={handleApplyPracticeStep}
+              onClose={() => setShowPracticePath(false)}
+            />
+          )}
         </div>
       )}
 
-      <ChordRibbon
-        language={settings.language}
-        detectedKey={liveHarmony.key}
-        chords={liveHarmony.chords}
-        currentTimeSec={snapshot.currentTimeSec}
-        transpose={snapshot.transpose}
-        noteLabelMode={settings.noteLabelMode}
-        isAccompanimentActive={Boolean(accompanimentSong)}
-        activeStyleLabel={
-          activeStyleMeta
-            ? settings.language === 'vi'
-              ? activeStyleMeta.nameVi
-              : activeStyleMeta.nameEn
-            : undefined
-        }
-        onOpenStudio={() => setShowAccompaniment(true)}
-        onReturnOriginal={handleReturnOriginal}
-      />
-
-      <PianoStage
-        song={currentSong}
-        clock={clock}
-        player={player}
-        transpose={snapshot.transpose}
-        noteLabelMode={settings.noteLabelMode}
-        showKeyLabels={settings.showKeyLabels}
-        effectsEnabled={settings.effectsEnabled}
-        fullKeyboard={fullKeyboard}
-        externalPressedMidis={externalPressedRef.current}
-        onSnapshotTick={setSnapshot}
-      />
-
-      {showAccompaniment && (
-        <AccompanimentModal
-          language={settings.language}
-          originalSong={originalSong}
-          player={player}
-          isAccompanimentActive={Boolean(accompanimentSong)}
-          activeStyleId={activeStyleId}
-          initialTab={accompanimentTab}
-          onApplyAccompaniment={handleApplyAccompaniment}
-          onReturnOriginal={handleReturnOriginal}
-          onClose={() => setShowAccompaniment(false)}
-        />
-      )}
-
-      {showLibrary && (
-        <LibraryModal
+      {activeView === 'library' && (
+        <LibraryView
           language={settings.language}
           songs={songs}
           currentSongId={originalSong.id}
           onSelectSong={selectSong}
+          onArrangeSong={(song) => {
+            setOriginalSong(song);
+            setAccompanimentSong(null);
+            clock.loadSong(song);
+            setSnapshot(clock.getSnapshot());
+            setActiveView('arrange');
+          }}
           onImportSong={handleImportSong}
           onDeleteSong={handleDeleteSong}
-          onClose={() => setShowLibrary(false)}
+        />
+      )}
+
+      {activeView === 'arrange' && (
+        <ArrangeView
+          language={settings.language}
+          originalSong={originalSong}
+          isAccompanimentActive={Boolean(accompanimentSong)}
+          activeStyleId={activeStyleId}
+          onApplyAccompaniment={handleApplyAccompaniment}
+          onReturnOriginal={() => {
+            handleReturnOriginal();
+            setActiveView('player');
+          }}
+        />
+      )}
+
+      {activeView === 'theory' && (
+        <TheoryView
+          language={settings.language}
+          player={player}
+          detectedKey={liveHarmony.key}
+        />
+      )}
+
+      {activeView === 'quiz' && (
+        <NoteQuizView
+          language={settings.language}
+          song={currentSong}
+          player={player}
         />
       )}
 
@@ -419,6 +499,6 @@ export default function App() {
           onClose={() => setShowSettings(false)}
         />
       )}
-    </div>
+    </AppShell>
   );
 }

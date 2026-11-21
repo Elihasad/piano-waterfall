@@ -2,6 +2,21 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --color-paper: #f8f6f1;
+  --color-surface: #ffffff;
+  --color-line: #e7e3d9;
+  --color-ink: #14151c;
+  --color-ink-soft: #4a4f5e;
+  --color-ink-mute: #888d9c;
+  --color-accent: #4f46e5;
+  --color-accent-soft: #eceefe;
+  --color-violet: #7c3aed;
+  --color-rh: #7a93ff;
+  --color-lh: #34b8a2;
+  --color-night: #0c0e16;
+}
+
 html,
 body,
 #root {
@@ -9,8 +24,68 @@ body,
   height: 100%;
   margin: 0;
   padding: 0;
-  background-color: #121216;
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+  font-family: 'Inter', 'Segoe UI', ui-sans-serif, system-ui, -apple-system, sans-serif;
   overscroll-behavior: none;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+}
+
+.display-serif {
+  font-family: 'Fraunces', 'Georgia', ui-serif, serif;
+  letter-spacing: -0.025em;
+}
+
+.staff-hero {
+  background-color: #0c0e16;
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.055) 0px,
+      rgba(255, 255, 255, 0.055) 1px,
+      transparent 1px,
+      transparent 22px
+    ),
+    radial-gradient(120% 120% at 10% 0%, rgba(15, 118, 110, 0.65), rgba(30, 27, 75, 0.85) 55%, #0b0a1f);
+}
+
+.arrange-hero {
+  background-color: #1e1b4b;
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.05) 0px,
+      rgba(255, 255, 255, 0.05) 1px,
+      transparent 1px,
+      transparent 22px
+    ),
+    linear-gradient(135deg, #4338ca 0%, #6d4ef0 52%, #0f766e 100%);
+}
+
+.theory-hero {
+  background-color: #0f172a;
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.05) 0px,
+      rgba(255, 255, 255, 0.05) 1px,
+      transparent 1px,
+      transparent 22px
+    ),
+    linear-gradient(135deg, #0f766e 0%, #2563eb 55%, #4338ca 100%);
+}
+
+.paper-card {
+  background-color: #ffffff;
+  border: 1px solid #e7e3d9;
+  box-shadow: 0 1px 2px rgba(20, 21, 28, 0.04), 0 8px 24px -12px rgba(20, 21, 28, 0.12);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }

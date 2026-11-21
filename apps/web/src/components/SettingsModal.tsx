@@ -35,21 +35,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/75 p-3">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[1px] p-3">
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-md max-h-[90vh] flex flex-col rounded-2xl bg-[#1a1b22] border border-[#2c2e3b] shadow-2xl overflow-hidden"
+        className="w-full max-w-md max-h-[90vh] flex flex-col rounded-2xl bg-[#f8f6f1] text-[#14151c] border border-[#e7e3d9] shadow-2xl overflow-hidden"
       >
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[#2c2e3b]">
-          <h2 className="text-sm font-bold text-slate-100">
+        <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-[#e7e3d9]">
+          <h2 className="display-serif text-base font-bold text-[#14151c]">
             {t(language, 'settingsTitle')}{' '}
-            <span className="text-[11px] font-normal text-slate-400">v1.3.6</span>
+            <span className="font-sans text-[11px] font-normal text-[#888d9c]">v1.3.7</span>
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label={t(language, 'close')}
-            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#242632] text-slate-400"
+            className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-[#f3f0e8] text-[#4a4f5e]"
           >
             <X className="w-4 h-4" />
           </button>
@@ -58,15 +58,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs">
           {/* Language Switcher */}
           <div className="space-y-1.5">
-            <label className="block font-semibold text-slate-200">{t(language, 'languageLabel')}</label>
+            <label className="block font-semibold text-[#14151c]">{t(language, 'languageLabel')}</label>
             <div className="grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => setLanguage('en')}
-                className={`py-2 rounded-lg font-semibold border transition ${
+                className={`py-2 rounded-xl font-semibold border transition ${
                   language === 'en'
-                    ? 'bg-violet-600 text-white border-violet-500'
-                    : 'bg-[#121216] text-slate-300 border-[#2c2e3b]'
+                    ? 'bg-[#4f46e5] text-white border-[#4f46e5]'
+                    : 'bg-white text-[#4a4f5e] border-[#e7e3d9]'
                 }`}
               >
                 English
@@ -74,10 +74,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <button
                 type="button"
                 onClick={() => setLanguage('vi')}
-                className={`py-2 rounded-lg font-semibold border transition ${
+                className={`py-2 rounded-xl font-semibold border transition ${
                   language === 'vi'
-                    ? 'bg-violet-600 text-white border-violet-500'
-                    : 'bg-[#121216] text-slate-300 border-[#2c2e3b]'
+                    ? 'bg-[#4f46e5] text-white border-[#4f46e5]'
+                    : 'bg-white text-[#4a4f5e] border-[#e7e3d9]'
                 }`}
               >
                 Tiếng Việt
@@ -87,7 +87,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {/* Piano Sound Preset */}
           <div className="space-y-1.5">
-            <label className="block font-semibold text-slate-200">{t(language, 'soundPreset')}</label>
+            <label className="block font-semibold text-[#14151c]">{t(language, 'soundPreset')}</label>
             <div className="grid grid-cols-2 gap-2">
               {(
                 [
@@ -101,10 +101,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   key={id}
                   type="button"
                   onClick={() => setSoundPreset(id)}
-                  className={`py-2 px-2 rounded-lg font-semibold border transition ${
+                  className={`py-2 px-2 rounded-xl font-semibold border transition ${
                     soundPreset === id
-                      ? 'bg-violet-600 text-white border-violet-500'
-                      : 'bg-[#121216] text-slate-300 border-[#2c2e3b]'
+                      ? 'bg-[#4f46e5] text-white border-[#4f46e5]'
+                      : 'bg-white text-[#4a4f5e] border-[#e7e3d9]'
                   }`}
                 >
                   {label}
@@ -114,54 +114,54 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
 
           {/* USB / Bluetooth MIDI Status */}
-          <div className="rounded-xl bg-[#14151c] border border-[#262836] p-3 space-y-2">
+          <div className="rounded-xl bg-white border border-[#e7e3d9] p-3 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="font-semibold text-slate-200 flex items-center gap-1.5">
-                <Usb className="w-4 h-4 text-cyan-400" />
+              <span className="font-semibold text-[#14151c] flex items-center gap-1.5">
+                <Usb className="w-4 h-4 text-[#4f46e5]" />
                 USB / Bluetooth MIDI
               </span>
               <button
                 type="button"
                 onClick={onReconnectMidi}
-                className="px-2.5 py-1 rounded-lg bg-[#242632] hover:bg-[#2f3242] text-cyan-300 font-semibold"
+                className="px-2.5 py-1 rounded-full bg-[#eceefe] hover:bg-[#dfe2fd] text-[#4f46e5] font-semibold"
               >
                 Scan MIDI
               </button>
             </div>
             {midiDevices.length > 0 ? (
-              <div className="text-emerald-400 font-medium">
+              <div className="text-[#2f9e6c] font-medium">
                 Connected: {midiDevices.join(', ')}
               </div>
             ) : (
-              <div className="text-slate-400">
+              <div className="text-[#4a4f5e]">
                 {midiSupported ? t(language, 'midiConnectHint') : 'Web MIDI not supported on this browser.'}
               </div>
             )}
           </div>
 
           {/* Show key labels */}
-          <label className="flex items-center justify-between bg-[#14151c] rounded-xl px-3 py-2.5 border border-[#262836] cursor-pointer">
-            <span className="font-semibold text-slate-200">{t(language, 'showKeyLabelsLabel')}</span>
+          <label className="flex items-center justify-between bg-white rounded-xl px-3 py-2.5 border border-[#e7e3d9] cursor-pointer">
+            <span className="font-semibold text-[#14151c]">{t(language, 'showKeyLabelsLabel')}</span>
             <input
               type="checkbox"
               checked={showKeyLabels}
               onChange={(e) => setShowKeyLabels(e.target.checked)}
-              className="w-4 h-4 accent-violet-500"
+              className="w-4 h-4 accent-[#4f46e5]"
             />
           </label>
         </div>
 
-        <div className="flex justify-end gap-2 px-4 py-3 border-t border-[#2c2e3b]">
+        <div className="flex justify-end gap-2 px-4 py-3 bg-white border-t border-[#e7e3d9]">
           <button
             type="button"
             onClick={onClose}
-            className="px-3 py-1.5 rounded-lg bg-[#242632] text-xs text-slate-300"
+            className="px-3.5 py-1.5 rounded-full bg-[#f3f0e8] text-xs font-semibold text-[#4a4f5e]"
           >
             {t(language, 'cancel')}
           </button>
           <button
             type="submit"
-            className="px-4 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-xs font-bold text-white"
+            className="px-4 py-1.5 rounded-full bg-[#14151c] hover:bg-[#2a2d3d] text-xs font-bold text-white"
           >
             {t(language, 'save')}
           </button>

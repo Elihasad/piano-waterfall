@@ -10,6 +10,7 @@ export interface PlaybackSnapshot {
   loopEnabled: boolean;
   loopStartMeasure: number;
   loopEndMeasure: number;
+  metronomeEnabled: boolean;
   practiceMode: PracticeMode;
   waitingMidis: number[];
   hands: HandControlState;
@@ -26,6 +27,8 @@ export class PlaybackClock {
   private loopEnabled = false;
   private loopStartMeasure = 1;
   private loopEndMeasure = 1;
+  private metronomeEnabled = false;
+  private lastMetronomeBeatIdx = -1;
   private practiceMode: PracticeMode = 'listen';
   private waitingMidis = new Set<number>();
   private satisfiedWaitTimeSec = -1;
@@ -49,6 +52,7 @@ export class PlaybackClock {
     this.currentTimeSec = 0;
     this.cursorTimeSec = -1;
     this.audioCursorSec = -1;
+    this.lastMetronomeBeatIdx = -1;
     this.waitingMidis.clear();
     this.satisfiedWaitTimeSec = -1;
     this.loopEnabled = false;
@@ -175,6 +179,11 @@ export class PlaybackClock {
       this.player.stopAll();
       this.audioCursorSec = this.currentTimeSec;
     }
+  }
+
+  setMetronome(enabled: boolean): void {
+    this.metronomeEnabled = enabled;
+    this.lastMetronomeBeatIdx = -1;
   }
 
   setPracticeMode(mode: PracticeMode): void {
@@ -358,6 +367,16 @@ export class PlaybackClock {
       this.triggerNotesInWindow(startWindow, nextTime);
     }
 
+    if (this.metronomeEnabled && this.song && this.player.playMetronomeClick) {
+      const secPerBeat = 60 / Math.max(30, this.song.defaultBpm);
+      const beatsPerMeasure = this.song.measures[0]?.beats || 4;
+      const beatIdx = Math.floor(nextTime / secPerBeat);
+      if (beatIdx !== this.lastMetronomeBeatIdx && beatIdx >= 0) {
+        this.lastMetronomeBeatIdx = beatIdx;
+        this.player.playMetronomeClick(beatIdx % beatsPerMeasure === 0, audioNow ?? undefined);
+      }
+    }
+
     if (nextTime >= this.song.durationSec) {
       this.currentTimeSec = this.song.durationSec;
       this.cursorTimeSec = this.song.durationSec;
@@ -395,6 +414,7 @@ export class PlaybackClock {
       loopEnabled: this.loopEnabled,
       loopStartMeasure: this.loopStartMeasure,
       loopEndMeasure: this.loopEndMeasure,
+      metronomeEnabled: this.metronomeEnabled,
       practiceMode: this.practiceMode,
       waitingMidis: Array.from(this.waitingMidis),
       hands: {
