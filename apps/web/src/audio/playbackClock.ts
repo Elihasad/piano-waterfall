@@ -1,5 +1,6 @@
 import { clampMidi } from '../core/noteNames';
-import type { HandControlState, NoteEvent, PracticeMode, Song } from '../core/types';
+import { resolveEffectiveHand } from '../core/parsers/handSeparation';
+import type { HandControlState, HandSplitMode, NoteEvent, PracticeMode, Song } from '../core/types';
 import type { NotePlayer } from './pianoSynth';
 
 export interface PlaybackSnapshot {
@@ -37,6 +38,7 @@ export class PlaybackClock {
     left: { audio: true, visual: true },
     right: { audio: true, visual: true },
   };
+  private handSplitMode: HandSplitMode = 'auto';
   private cursorTimeSec: number | null = null;
   private audioCursorSec: number | null = null;
   private leadInSec = 0;
@@ -186,6 +188,16 @@ export class PlaybackClock {
     }
   }
 
+  setHandSplitMode(mode: HandSplitMode): void {
+    if (this.handSplitMode === mode) return;
+    this.handSplitMode = mode;
+    this.waitingMidis.clear();
+    if (this.isPlaying) {
+      this.player.stopAll();
+      this.audioCursorSec = this.currentTimeSec;
+    }
+  }
+
   setMetronome(enabled: boolean): void {
     this.metronomeEnabled = enabled;
     this.lastMetronomeBeatIdx = -1;
@@ -238,8 +250,9 @@ export class PlaybackClock {
     for (const note of this.song.notes) {
       if (note.startTimeSec < fromInclusive) continue;
       if (note.startTimeSec >= toExclusive) break;
+      const effectiveHand = resolveEffectiveHand(note, this.handSplitMode);
       const handAudioEnabled =
-        note.hand === 'left' ? this.hands.left.audio : this.hands.right.audio;
+        effectiveHand === 'left' ? this.hands.left.audio : this.hands.right.audio;
       if (!handAudioEnabled) continue;
 
       const pitchedMidi = clampMidi(note.midi + this.transpose);
@@ -265,7 +278,8 @@ export class PlaybackClock {
       if (note.startTimeSec >= toExclusive) break;
       if (Math.abs(note.startTimeSec - this.satisfiedWaitTimeSec) < 0.005) continue;
 
-      const isVisible = note.hand === 'left' ? this.hands.left.visual : this.hands.right.visual;
+      const effectiveHand = resolveEffectiveHand(note, this.handSplitMode);
+      const isVisible = effectiveHand === 'left' ? this.hands.left.visual : this.hands.right.visual;
       if (!isVisible) continue;
 
       if (eventTime < 0) {
@@ -370,6 +384,7 @@ export class PlaybackClock {
       this.audioCursorSec = Math.max(this.audioCursorSec ?? schedFrom, schedTo);
     } else {
       this.triggerNotesInWindow(startWindow, nextTime);
+      this.audioCursorSec = Math.max(this.audioCursorSec ?? startWindow, nextTime);
     }
 
     if (this.metronomeEnabled && this.song && this.player.playMetronomeClick) {
@@ -402,8 +417,9 @@ export class PlaybackClock {
       for (const note of this.song.notes) {
         if (note.startTimeSec > t) break;
         if (note.startTimeSec + note.durationSec > t) {
+          const effectiveHand = resolveEffectiveHand(note, this.handSplitMode);
           const visible =
-            note.hand === 'left' ? this.hands.left.visual : this.hands.right.visual;
+            effectiveHand === 'left' ? this.hands.left.visual : this.hands.right.visual;
           if (visible) {
             activeNotes.push(note);
           }

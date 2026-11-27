@@ -26,7 +26,12 @@ export function parseMidiBuffer(buffer: ArrayBuffer, fallbackTitle: string): Son
   const beatType = timeSig[1] || 4;
   const measureDurationSec = beats * (4 / beatType) * (60 / defaultBpm);
 
-  const nonEmptyTracks = midi.tracks.filter((t) => t.notes.length > 0);
+  const allNonEmpty = midi.tracks.filter((t) => t.notes.length > 0);
+  // Filter out GM Percussion tracks (channel 9 / drum kit) when melodic tracks exist
+  const melodicTracks = allNonEmpty.filter(
+    (t) => t.channel !== 9 && !t.instrument?.percussion,
+  );
+  const nonEmptyTracks = melodicTracks.length > 0 ? melodicTracks : allNonEmpty;
 
   // Determine per-track hand assignment smartly using track names & average pitch
   // (prevents inverted colors when Track 0 is Bass/LH or when a MIDI has 3+ tracks)

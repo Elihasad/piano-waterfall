@@ -162,4 +162,40 @@ describe('PlaybackClock', () => {
     clock.advance(1.0); // crosses 0.0s to +0.1s -> first chord plays cleanly!
     expect(calls.map((c) => c.midi)).toEqual([60, 48]);
   });
+
+  it('respects handSplitMode when muting hands and does not double-trigger across AudioContext resume', () => {
+    const calls: Array<{ midi: number; durationSec: number; velocity: number }> = [];
+    let audioRunning = false;
+    let audioNow = 0;
+    const player: NotePlayer = {
+      async unlock() {},
+      setPreset() {},
+      getPreset: () => 'grand',
+      getAudioTime: () => (audioRunning ? audioNow : null),
+      playNote(midi, durationSec, velocity = 0.8) {
+        calls.push({ midi, durationSec, velocity });
+      },
+      stopAll() {},
+    };
+
+    const clock = new PlaybackClock(player);
+    clock.loadSong(TEST_SONG);
+    clock.setHandSplitMode('swap');
+    // With hands swapped, right-hand note (60) becomes left, left-hand note (48) becomes right
+    clock.setHands({
+      left: { audio: true, visual: true },
+      right: { audio: false, visual: true },
+    });
+    clock.play();
+
+    // Frame 1: AudioContext still suspended (getAudioTime() === null) -> plays midi 60 once
+    clock.advance(0.1);
+    expect(calls.map((c) => c.midi)).toEqual([60]);
+
+    // Frame 2: AudioContext resumes -> MUST NOT double-trigger midi 60!
+    audioRunning = true;
+    audioNow = 0.1;
+    clock.advance(0.1);
+    expect(calls.map((c) => c.midi)).toEqual([60]);
+  });
 });

@@ -94,6 +94,7 @@ export class PianoSynth implements NotePlayer {
   private sampleBuffers = new Map<number, AudioBuffer>();
   private splendidPiano: SplendidGrandPiano | null = null;
   private splendidReady = false;
+  private smplrVoiceSeq = 0;
   private loadingStarted = false;
   private mutedByStop = false;
   private preset: SoundPreset = 'grand';
@@ -157,18 +158,29 @@ export class PianoSynth implements NotePlayer {
   }
 
   private initSplendidGrand(ctx: AudioContext, destination: AudioNode): void {
-    // Load multi-velocity Steinway Grand Piano from smplr in the background;
-    // falls back seamlessly to bundled offline Salamander samples while loading or offline.
+    // Load multi-velocity Steinway Grand Piano from smplr ONLY when online AND 100% of samples succeed.
+    // Otherwise stay on bundled 100% offline Salamander Grand Piano (zero silent/dropped notes!).
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      this.splendidReady = false;
+      return;
+    }
     try {
+      let loadedCount = 0;
+      let totalCount = 0;
       const piano = new SplendidGrandPiano(ctx, {
         destination,
         decayTime: 0.72,
         volume: 105,
-      });
+        onLoadProgress: ({ loaded, total }: { loaded: number; total: number }) => {
+          loadedCount = loaded;
+          totalCount = total;
+        },
+      } as ConstructorParameters<typeof SplendidGrandPiano>[1]);
       this.splendidPiano = piano;
       void piano.load
         .then(() => {
-          this.splendidReady = true;
+          // smplr's load() resolves even when CDN fetches fail offline — verify every sample actually loaded!
+          this.splendidReady = totalCount > 0 && loadedCount >= totalCount;
         })
         .catch(() => {
           this.splendidReady = false;
@@ -343,11 +355,13 @@ export class PianoSynth implements NotePlayer {
         const midiVel = Math.max(18, Math.min(127, Math.round(expressiveVel * 127)));
         const registerTail = clamped < 52 ? 0.35 : clamped < 72 ? 0.18 : 0.08;
         const totalDur = holdDur + registerTail;
+        const stopId = `sv-${++this.smplrVoiceSeq}`;
         const stopFn = this.splendidPiano.start({
           note: clamped,
           velocity: midiVel,
           time: now,
           duration: totalDur,
+          stopId,
         });
         if (typeof stopFn === 'function') {
           this.voices.push({

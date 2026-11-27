@@ -132,8 +132,8 @@ const PROGRESSION_CARDS = [
     badge: 'bg-cyan-500/20 text-cyan-200',
     roman: 'I – V – vi – IV',
     example: 'C – G – Am – F',
-    descVi: 'Vòng "Best-Seller" (Chương 9) cho hàng nghìn bài Pop/Ballad. Sáng, dễ nghe, dễ hát.',
-    descEn: 'The classic "Best-Seller" progression (Ch. 9). Bright, emotional, and easy to sing over.',
+    descVi: 'Vòng "Best-Seller" cho hàng nghìn bài Pop/Ballad. Sáng, dễ nghe, dễ hát.',
+    descEn: 'The classic "Best-Seller" progression. Bright, emotional, and easy to sing over.',
   },
   {
     genre: 'V-Pop / Canon',
@@ -159,8 +159,8 @@ const PROGRESSION_CARDS = [
     badge: 'bg-rose-500/20 text-rose-200',
     roman: 'I – IV – iv – I  /  I – bVI – bVII – I',
     example: 'C – F – Fm – C  /  C – Ab – Bb – C',
-    descVi: 'Kỹ thuật vay hợp âm từ giọng Thứ cùng tên (Chương 19): thêm Fm vào giọng C tạo cảm giác "thắt tim" cực đắt giá cuối điệp khúc!',
-    descEn: 'Borrowed chords from parallel minor (Ch. 19): IV → iv → I adds instant emotional bittersweet color.',
+    descVi: 'Kỹ thuật vay hợp âm từ giọng Thứ cùng tên: thêm Fm vào giọng C tạo cảm giác "thắt tim" cực đắt giá cuối điệp khúc!',
+    descEn: 'Borrowed chords from parallel minor: IV → iv → I adds instant emotional bittersweet color.',
   },
   {
     genre: 'Jazz Chuẩn (II–V–I)',
@@ -168,8 +168,8 @@ const PROGRESSION_CARDS = [
     badge: 'bg-amber-500/20 text-amber-200',
     roman: 'ii7 – V7 – Imaj7 – vi7',
     example: 'Dm9 – G13 – Cmaj9 – Am7',
-    descVi: 'Xương sống của mọi bản Jazz (Chương 31). Thay V7 bằng Tritone Sub (Db7 thay cho G7) tạo đường bass đi nửa cung D → Db → C cực sang!',
-    descEn: 'Backbone of Jazz (Ch. 31). Try Tritone Substitution (Dm7 – Db7 – Cmaj7) for chromatic bass motion.',
+    descVi: 'Xương sống của mọi bản Jazz. Thay V7 bằng Tritone Sub (Db7 thay cho G7) tạo đường bass đi nửa cung D → Db → C cực sang!',
+    descEn: 'Backbone of Jazz. Try Tritone Substitution (Dm7 – Db7 – Cmaj7) for chromatic bass motion.',
   },
   {
     genre: 'Bolero / Rumba (Thứ)',
@@ -562,8 +562,8 @@ export const TheoryGuideTab: React.FC<TheoryGuideTabProps> = ({
           <div className="rounded-xl bg-[#14151c] border border-[#262836] p-3 space-y-2">
             <div className="font-bold text-slate-100">
               {isVi
-                ? 'Cặp Tông Song Song (dùng chung 100% nốt & hóa biểu — Chương 2 & 3)'
-                : 'Relative Major / Minor Pairs (Same Key Signature — Ch. 2 & 3)'}
+                ? 'Cặp Tông Song Song (dùng chung 100% nốt & hóa biểu)'
+                : 'Relative Major / Minor Pairs (Same Key Signature)'}
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
               {RELATIVE_PAIRS.map((p) => (
@@ -589,8 +589,8 @@ export const TheoryGuideTab: React.FC<TheoryGuideTabProps> = ({
           <div className="rounded-xl bg-[#14151c] border border-[#262836] p-3 space-y-2">
             <div className="font-bold text-cyan-300">
               {isVi
-                ? 'Cấu tạo Hợp Âm Ba & Hợp Âm Bảy (bấm để nghe trên gốc C — Chương 6 & 8)'
-                : 'Triad & Seventh Chord Formulas (click to hear on C — Ch. 6 & 8)'}
+                ? 'Cấu tạo Hợp Âm Ba & Hợp Âm Bảy (bấm để nghe trên gốc C)'
+                : 'Triad & Seventh Chord Formulas (click to hear on C)'}
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
               {(
@@ -662,7 +662,7 @@ export const TheoryGuideTab: React.FC<TheoryGuideTabProps> = ({
           {/* 4 Cadences */}
           <div className="rounded-xl bg-[#14151c] border border-[#262836] p-3 space-y-1.5">
             <div className="font-bold text-slate-100">
-              {isVi ? '4 Kiểu Kết Câu (Cadences — Chương 7)' : '4 Essential Cadences (Ch. 7)'}
+              {isVi ? '4 Kiểu Kết Câu (Cadences)' : '4 Essential Cadences'}
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-[11px]">
               <div className="bg-[#1b1d28] rounded-lg p-2">
@@ -710,7 +710,7 @@ export const TheoryGuideTab: React.FC<TheoryGuideTabProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <div className="rounded-xl bg-[#14151c] border border-[#262836] p-3 space-y-1.5">
               <div className="font-bold text-emerald-300">
-                {isVi ? 'Bí quyết Đảo Hợp Âm (Voice Leading — Chương 26)' : 'Smooth Chords (Voice Leading — Ch. 26)'}
+                {isVi ? 'Bí quyết Đảo Hợp Âm (Voice Leading)' : 'Smooth Chords (Voice Leading)'}
               </div>
               <p className="text-[11px] text-slate-300 leading-relaxed">
                 {isVi
@@ -747,7 +747,7 @@ export const TheoryGuideTab: React.FC<TheoryGuideTabProps> = ({
         </div>
       )}
 
-      {/* SECTION 4: JAZZ THEORY (CH. 31) & ARPEGGIO RHYTHM GRIDS */}
+      {/* SECTION 4: JAZZ THEORY & ARPEGGIO RHYTHM GRIDS */}
       {section === 'patterns' && (
         <div className="space-y-2.5">
           {/* Jazz Theory Quick Reference */}

@@ -55,6 +55,7 @@ export default function App() {
   const [settings, setSettings] = useState<AppSettings>(() => {
     const loaded = getSettings();
     player.setPreset(loaded.soundPreset);
+    clock.setHandSplitMode(loaded.handSplitMode ?? 'auto');
     return loaded;
   });
   const [fullKeyboard, setFullKeyboard] = useState(false);
@@ -210,9 +211,13 @@ export default function App() {
       if (partial.soundPreset) {
         player.setPreset(partial.soundPreset);
       }
+      if (partial.handSplitMode) {
+        clock.setHandSplitMode(partial.handSplitMode);
+        setSnapshot(clock.getSnapshot());
+      }
       setSettings(updated);
     },
-    [player],
+    [player, clock],
   );
 
   const handleTogglePlay = useCallback(() => {
@@ -446,9 +451,27 @@ export default function App() {
                 onToggleTheme={() => setDarkTheme((d) => !d)}
                 onToggleMetronome={handleToggleMetronome}
                 onOpenPracticePath={() => setShowPracticePath(true)}
-                onOpenAccompaniment={() => setActiveView('arrange')}
-                onOpenTheory={() => setActiveView('theory')}
-                onOpenQuiz={() => setActiveView('quiz')}
+                onOpenAccompaniment={() => {
+                  if (snapshot.isPlaying) {
+                    clock.pause();
+                    setSnapshot(clock.getSnapshot());
+                  }
+                  setActiveView('arrange');
+                }}
+                onOpenTheory={() => {
+                  if (snapshot.isPlaying) {
+                    clock.pause();
+                    setSnapshot(clock.getSnapshot());
+                  }
+                  setActiveView('theory');
+                }}
+                onOpenQuiz={() => {
+                  if (snapshot.isPlaying) {
+                    clock.pause();
+                    setSnapshot(clock.getSnapshot());
+                  }
+                  setActiveView('quiz');
+                }}
                 onOpenHome={() => {
                   if (snapshot.isPlaying) {
                     clock.pause();
@@ -456,7 +479,13 @@ export default function App() {
                   }
                   setActiveView('home');
                 }}
-                onOpenLibrary={() => setActiveView('library')}
+                onOpenLibrary={() => {
+                  if (snapshot.isPlaying) {
+                    clock.pause();
+                    setSnapshot(clock.getSnapshot());
+                  }
+                  setActiveView('library');
+                }}
                 onOpenSettings={() => setShowSettings(true)}
               />
 
@@ -542,6 +571,7 @@ export default function App() {
 
           {showPracticePath && (
             <PracticePathDrawer
+              key={currentSong.id}
               language={settings.language}
               song={currentSong}
               onApplyStep={handleApplyPracticeStep}
@@ -571,6 +601,7 @@ export default function App() {
 
       {activeView === 'arrange' && (
         <ArrangeView
+          key={originalSong.id}
           language={settings.language}
           originalSong={originalSong}
           isAccompanimentActive={Boolean(accompanimentSong)}
@@ -594,6 +625,7 @@ export default function App() {
 
       {activeView === 'quiz' && (
         <NoteQuizView
+          key={currentSong.id}
           language={settings.language}
           song={currentSong}
           player={player}

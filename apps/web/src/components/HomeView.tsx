@@ -80,7 +80,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
   ];
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#f8f6f1] px-4 sm:px-6 py-5 pb-24 md:pb-10">
+    <div className="flex-1 overflow-y-auto bg-[#f8f6f1] px-4 sm:px-6 py-5 pb-28 lg:pb-10">
       <div className="max-w-5xl mx-auto space-y-6">
         {/* MuseKey Editorial Dark Hero */}
         <div className="staff-hero rounded-[1.75rem] p-6 sm:p-8 text-white shadow-lg relative overflow-hidden">
