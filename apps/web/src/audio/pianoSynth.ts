@@ -13,10 +13,12 @@ export interface NotePlayer {
 }
 
 interface ActiveVoice {
+  startTime: number;
+  endTime: number;
   stop: () => void;
 }
 
-const MAX_POLYPHONY = 64;
+const MAX_POLYPHONY = 128;
 
 const SALAMANDER_SAMPLES: ReadonlyArray<{ midi: number; file: string }> = [
   { midi: 33, file: 'A1.mp3' },
@@ -247,7 +249,7 @@ export class PianoSynth implements NotePlayer {
 
   getAudioTime(): number | null {
     const ctx = this.ensureContext();
-    return ctx ? ctx.currentTime : null;
+    return ctx && ctx.state === 'running' ? ctx.currentTime : null;
   }
 
   playMetronomeClick(accent: boolean, startAtAudioTime?: number): void {
@@ -289,20 +291,28 @@ export class PianoSynth implements NotePlayer {
       void ctx.resume();
     }
 
+    const audioNow = ctx.currentTime;
     if (this.mutedByStop && this.masterGain) {
-      const t = ctx.currentTime;
-      this.masterGain.gain.cancelScheduledValues(t);
-      this.masterGain.gain.setValueAtTime(1, t);
+      this.masterGain.gain.cancelScheduledValues(audioNow);
+      this.masterGain.gain.setValueAtTime(1, audioNow);
       this.mutedByStop = false;
     }
 
+    // Prune already-finished voices (critical for smplr voices that have no onended callback!)
+    if (this.voices.length > 0) {
+      this.voices = this.voices.filter((v) => v.endTime > audioNow);
+    }
+
+    // If still above MAX_POLYPHONY, only steal the oldest ALREADY-STARTED voice (never kill future lookahead notes!)
     while (this.voices.length >= MAX_POLYPHONY) {
-      const oldest = this.voices.shift();
+      const idx = this.voices.findIndex((v) => v.startTime <= audioNow);
+      if (idx === -1) break;
+      const [oldest] = this.voices.splice(idx, 1);
       oldest?.stop();
     }
 
     const clamped = clampMidi(midi);
-    const baseNow = startAtAudioTime ?? ctx.currentTime;
+    const baseNow = Math.max(audioNow + 0.002, startAtAudioTime ?? audioNow);
     const rawVel = Math.max(0.1, Math.min(1, velocity));
     const holdDur = Math.max(0.1, Math.min(durationSec, 8));
 
@@ -327,30 +337,35 @@ export class PianoSynth implements NotePlayer {
       return;
     }
 
-    // Prefer 4-velocity-layer Steinway Grand (smplr) when loaded for rich, non-mechanical acoustics
+    // Prefer 4-velocity-layer Steinway Grand (smplr) when loaded; fall back immediately if start() fails
     if (this.splendidReady && this.splendidPiano) {
-      const midiVel = Math.max(18, Math.min(127, Math.round(expressiveVel * 127)));
-      // Register-aware natural sustain tail
-      const registerTail = clamped < 52 ? 0.35 : clamped < 72 ? 0.18 : 0.08;
-      const stopFn = this.splendidPiano.start({
-        note: clamped,
-        velocity: midiVel,
-        time: now,
-        duration: holdDur + registerTail,
-      });
-      if (typeof stopFn === 'function') {
-        const voice: ActiveVoice = {
-          stop: () => {
-            try {
-              stopFn(ctx.currentTime);
-            } catch {
-              // ignore
-            }
-          },
-        };
-        this.voices.push(voice);
+      try {
+        const midiVel = Math.max(18, Math.min(127, Math.round(expressiveVel * 127)));
+        const registerTail = clamped < 52 ? 0.35 : clamped < 72 ? 0.18 : 0.08;
+        const totalDur = holdDur + registerTail;
+        const stopFn = this.splendidPiano.start({
+          note: clamped,
+          velocity: midiVel,
+          time: now,
+          duration: totalDur,
+        });
+        if (typeof stopFn === 'function') {
+          this.voices.push({
+            startTime: now,
+            endTime: now + totalDur + 0.8,
+            stop: () => {
+              try {
+                stopFn(ctx.currentTime);
+              } catch {
+                // ignore
+              }
+            },
+          });
+          return;
+        }
+      } catch {
+        // Fall through seamlessly to offline Salamander / synth fallback
       }
-      return;
     }
 
     const sample = this.findClosestSample(clamped);
@@ -414,6 +429,8 @@ export class PianoSynth implements NotePlayer {
     src.stop(endTime + 0.04);
 
     const voice: ActiveVoice = {
+      startTime: now,
+      endTime: endTime + 0.08,
       stop: () => {
         try {
           const t = ctx.currentTime;
@@ -495,6 +512,8 @@ export class PianoSynth implements NotePlayer {
     body.stop(endTime + 0.02);
 
     const voice: ActiveVoice = {
+      startTime: now,
+      endTime: endTime + 0.08,
       stop: () => {
         try {
           const t = ctx.currentTime;
@@ -569,6 +588,8 @@ export class PianoSynth implements NotePlayer {
     osc2.stop(endTime + 0.02);
 
     const voice: ActiveVoice = {
+      startTime: now,
+      endTime: endTime + 0.08,
       stop: () => {
         try {
           const t = ctx.currentTime;

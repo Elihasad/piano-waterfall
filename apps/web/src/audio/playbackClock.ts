@@ -40,7 +40,7 @@ export class PlaybackClock {
   private cursorTimeSec: number | null = null;
   private audioCursorSec: number | null = null;
   private leadInSec = 0;
-  private static readonly AUDIO_LOOKAHEAD_REAL_SEC = 1.6;
+  private static readonly AUDIO_LOOKAHEAD_REAL_SEC = 0.35;
 
   constructor(player: NotePlayer) {
     this.player = player;

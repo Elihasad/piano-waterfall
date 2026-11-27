@@ -121,7 +121,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                   Piano Waterfall
                 </div>
                 <div className="text-[10px] text-[#888d9c] font-medium mt-0.5">
-                  Studio · v1.3.28
+                  Studio · v1.3.29
                 </div>
               </div>
             </button>
@@ -241,7 +241,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                 <div className="display-serif font-bold text-sm text-[#14151c] truncate">
                   Piano Waterfall
                 </div>
-                <div className="text-[10px] text-[#888d9c]">v1.3.28</div>
+                <div className="text-[10px] text-[#888d9c]">v1.3.29</div>
               </div>
             </button>
 
