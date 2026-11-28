@@ -179,4 +179,21 @@ describe('MusicXML & MIDI parsers', () => {
     expect(song.notes[0].hand).toBe('left');
     expect(song.notes[0].durationSec).toBeCloseTo(2.0, 3);
   });
+
+  it('extends acoustic sustainSec via MIDI CC64 sustain pedal without altering visual durationSec', () => {
+    const midi = new Midi();
+    midi.header.setTempo(120);
+    const track = midi.addTrack();
+    track.addCC({ number: 64, value: 1, time: 0 });
+    track.addNote({ midi: 60, time: 0, duration: 0.25, velocity: 0.7 });
+    track.addCC({ number: 64, value: 0, time: 2.0 });
+
+    const arr = midi.toArray();
+    const buf = arr.buffer.slice(arr.byteOffset, arr.byteOffset + arr.byteLength) as ArrayBuffer;
+    const song = parseMidiBuffer(buf, 'Pedal Test.mid');
+
+    expect(song.notes).toHaveLength(1);
+    expect(song.notes[0].durationSec).toBeCloseTo(0.25, 2);
+    expect(song.notes[0].sustainSec).toBeCloseTo(2.0, 2);
+  });
 });

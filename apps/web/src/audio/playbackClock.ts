@@ -256,7 +256,7 @@ export class PlaybackClock {
       if (!handAudioEnabled) continue;
 
       const pitchedMidi = clampMidi(note.midi + this.transpose);
-      const scaledDuration = note.durationSec / this.speedRatio;
+      const scaledDuration = (note.sustainSec ?? note.durationSec) / this.speedRatio;
       const startAtAudioTime =
         audioNow !== undefined && refSongTimeSec !== undefined
           ? audioNow + Math.max(0, (note.startTimeSec - refSongTimeSec) / this.speedRatio)

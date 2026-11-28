@@ -1,4 +1,3 @@
-import { SplendidGrandPiano } from 'smplr';
 import { clampMidi } from '../core/noteNames';
 import type { SoundPreset } from '../core/types';
 
@@ -18,9 +17,18 @@ interface ActiveVoice {
   stop: () => void;
 }
 
+type VelocityLayer = 'PP' | 'MP' | 'MF' | 'FF';
+
+interface SampleManifestEntry {
+  midi: number;
+  file: string;
+}
+
+type SteinwayManifest = Record<VelocityLayer, SampleManifestEntry[]>;
+
 const MAX_POLYPHONY = 128;
 
-const SALAMANDER_SAMPLES: ReadonlyArray<{ midi: number; file: string }> = [
+const SALAMANDER_SAMPLES: ReadonlyArray<SampleManifestEntry> = [
   { midi: 33, file: 'A1.mp3' },
   { midi: 36, file: 'C2.mp3' },
   { midi: 39, file: 'Ds2.mp3' },
@@ -50,10 +58,10 @@ function midiToFrequency(midi: number): number {
 }
 
 /**
- * Generate a warm, natural concert-hall stereo impulse response with progressive
- * high-frequency air/wood damping (eliminates metallic white-noise hiss).
+ * Generates a natural concert-hall stereo impulse response with subtle pre-delay
+ * and progressive high-frequency wooden/air absorption (zero metallic hiss).
  */
-function createHallImpulse(ctx: AudioContext, durationSec = 2.4, decay = 2.9): AudioBuffer {
+function createHallImpulse(ctx: AudioContext, durationSec = 2.3, decay = 2.75): AudioBuffer {
   const rate = ctx.sampleRate;
   const length = Math.floor(rate * durationSec);
   const impulse = ctx.createBuffer(2, length, rate);
@@ -61,14 +69,14 @@ function createHallImpulse(ctx: AudioContext, durationSec = 2.4, decay = 2.9): A
     const data = impulse.getChannelData(ch);
     let lp1 = 0;
     let lp2 = 0;
+    const preDelaySamples = Math.floor(rate * (ch === 0 ? 0.015 : 0.018));
     for (let i = 0; i < length; i++) {
       const progress = i / length;
       const env = Math.pow(1 - progress, decay);
-      // Slight pre-delay & early reflection warmth
-      const preDelayGain = i < rate * 0.014 ? i / (rate * 0.014) : 1;
+      const preDelayGain = i < preDelaySamples ? (i / Math.max(1, preDelaySamples)) * 0.35 : 1;
       const white = Math.random() * 2 - 1;
-      // Progressive lowpass: brighter early reflections, warmer tail
-      const alpha = Math.max(0.06, 0.34 * (1 - progress * 0.78));
+      // Progressive lowpass: warm wooden early reflections -> silky dark hall tail
+      const alpha = Math.max(0.05, 0.32 * (1 - progress * 0.8));
       lp1 += alpha * (white - lp1);
       lp2 += alpha * (lp1 - lp2);
       data[i] = lp2 * env * preDelayGain;
@@ -78,10 +86,12 @@ function createHallImpulse(ctx: AudioContext, durationSec = 2.4, decay = 2.9): A
 }
 
 /**
- * Expressive Concert Piano engine combining:
- * 1. `SplendidGrandPiano` (danigb/smplr — 4-velocity-layer Steinway Grand samples) when online
- * 2. Bundled offline Salamander Grand Piano samples with velocity-sensitive felt lowpass,
- *    stereo keyboard panning, register-aware damper release, and warm concert hall reverb.
+ * Studio-grade 100% Offline Multi-Velocity Concert Piano Engine:
+ * - `grand`: 4-Velocity-Layer Public Domain Akai Steinway Concert Grand (`PP / MP / MF / FF`, 78 bundled .m4a samples)
+ *            with smooth velocity crossfading, stereo lid panning, and warm concert hall acoustics.
+ * - `studio`: Close-mic Yamaha C5 Salamander Grand Piano (22 bundled .mp3 samples) with tight studio clarity.
+ * - `bright`: Intimate Felt Soft Piano using the Steinway `PP` soft-hammer layer + warm felt damper lowpass.
+ * - `electric`: Warm Rhodes Mk1 Electric Piano with woody tine transient & stereo shimmer.
  */
 export class PianoSynth implements NotePlayer {
   private ctx: AudioContext | null = null;
@@ -89,12 +99,16 @@ export class PianoSynth implements NotePlayer {
   private wetGain: GainNode | null = null;
   private masterGain: GainNode | null = null;
   private lowShelf: BiquadFilterNode | null = null;
+  private midPresence: BiquadFilterNode | null = null;
   private highShelf: BiquadFilterNode | null = null;
   private voices: ActiveVoice[] = [];
-  private sampleBuffers = new Map<number, AudioBuffer>();
-  private splendidPiano: SplendidGrandPiano | null = null;
-  private splendidReady = false;
-  private smplrVoiceSeq = 0;
+  private salamanderBuffers = new Map<number, AudioBuffer>();
+  private steinwayLayers: Record<VelocityLayer, Map<number, AudioBuffer>> = {
+    PP: new Map(),
+    MP: new Map(),
+    MF: new Map(),
+    FF: new Map(),
+  };
   private loadingStarted = false;
   private mutedByStop = false;
   private preset: SoundPreset = 'grand';
@@ -114,29 +128,36 @@ export class PianoSynth implements NotePlayer {
 
       const lowShelf = ctx.createBiquadFilter();
       lowShelf.type = 'lowshelf';
-      lowShelf.frequency.value = 220;
+      lowShelf.frequency.value = 190;
+
+      const midPresence = ctx.createBiquadFilter();
+      midPresence.type = 'peaking';
+      midPresence.frequency.value = 1800;
+      midPresence.Q.value = 0.9;
 
       const highShelf = ctx.createBiquadFilter();
       highShelf.type = 'highshelf';
-      highShelf.frequency.value = 3200;
+      highShelf.frequency.value = 3800;
 
       const dryGain = ctx.createGain();
       const wetGain = ctx.createGain();
 
       const convolver = ctx.createConvolver();
-      convolver.buffer = createHallImpulse(ctx, 2.0, 2.8);
+      convolver.buffer = createHallImpulse(ctx, 2.3, 2.75);
 
+      // Gentle mastering bus compressor prevents clipping on loud chords while keeping full dynamics
       const compressor = ctx.createDynamicsCompressor();
-      compressor.threshold.value = -14;
-      compressor.knee.value = 18;
-      compressor.ratio.value = 3.5;
-      compressor.attack.value = 0.004;
-      compressor.release.value = 0.14;
+      compressor.threshold.value = -12;
+      compressor.knee.value = 20;
+      compressor.ratio.value = 3.0;
+      compressor.attack.value = 0.006;
+      compressor.release.value = 0.16;
 
       const masterGain = ctx.createGain();
       masterGain.gain.value = 1;
 
-      lowShelf.connect(highShelf);
+      lowShelf.connect(midPresence);
+      midPresence.connect(highShelf);
       highShelf.connect(dryGain);
       highShelf.connect(convolver);
       convolver.connect(wetGain);
@@ -146,108 +167,167 @@ export class PianoSynth implements NotePlayer {
       masterGain.connect(ctx.destination);
 
       this.lowShelf = lowShelf;
+      this.midPresence = midPresence;
       this.highShelf = highShelf;
       this.dryGain = dryGain;
       this.wetGain = wetGain;
       this.masterGain = masterGain;
       this.applyPresetRouting();
-      void this.preloadSamples();
-      this.initSplendidGrand(ctx, lowShelf);
+      void this.preloadAllLocalSamples();
     }
     return this.ctx;
   }
 
-  private initSplendidGrand(ctx: AudioContext, destination: AudioNode): void {
-    // Load multi-velocity Steinway Grand Piano from smplr ONLY when online AND 100% of samples succeed.
-    // Otherwise stay on bundled 100% offline Salamander Grand Piano (zero silent/dropped notes!).
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-      this.splendidReady = false;
+  private applyPresetRouting(): void {
+    if (!this.dryGain || !this.wetGain || !this.lowShelf || !this.midPresence || !this.highShelf) {
       return;
     }
-    try {
-      let loadedCount = 0;
-      let totalCount = 0;
-      const piano = new SplendidGrandPiano(ctx, {
-        destination,
-        decayTime: 0.72,
-        volume: 105,
-        onLoadProgress: ({ loaded, total }: { loaded: number; total: number }) => {
-          loadedCount = loaded;
-          totalCount = total;
-        },
-      } as ConstructorParameters<typeof SplendidGrandPiano>[1]);
-      this.splendidPiano = piano;
-      void piano.load
-        .then(() => {
-          // smplr's load() resolves even when CDN fetches fail offline — verify every sample actually loaded!
-          this.splendidReady = totalCount > 0 && loadedCount >= totalCount;
-        })
-        .catch(() => {
-          this.splendidReady = false;
-        });
-    } catch {
-      this.splendidReady = false;
-    }
-  }
-
-  private applyPresetRouting(): void {
-    if (!this.dryGain || !this.wetGain || !this.lowShelf || !this.highShelf) return;
     if (this.preset === 'grand') {
-      this.dryGain.gain.value = 0.85;
-      this.wetGain.gain.value = 0.36;
-      this.lowShelf.gain.value = 2.5;
-      this.highShelf.gain.value = 0.5;
+      // Steinway Concert Grand: warm resonant soundboard, lush concert hall air
+      this.dryGain.gain.value = 0.86;
+      this.wetGain.gain.value = 0.34;
+      this.lowShelf.gain.value = 2.2;
+      this.midPresence.gain.value = 0.6;
+      this.highShelf.gain.value = 1.2;
     } else if (this.preset === 'studio') {
-      this.dryGain.gain.value = 0.95;
-      this.wetGain.gain.value = 0.1;
-      this.lowShelf.gain.value = 0.5;
-      this.highShelf.gain.value = 1.5;
+      // Yamaha C5 Studio: focused close-mic punch & sparkle
+      this.dryGain.gain.value = 0.96;
+      this.wetGain.gain.value = 0.13;
+      this.lowShelf.gain.value = 0.8;
+      this.midPresence.gain.value = 1.6;
+      this.highShelf.gain.value = 2.0;
     } else if (this.preset === 'bright') {
-      this.dryGain.gain.value = 0.9;
-      this.wetGain.gain.value = 0.22;
-      this.lowShelf.gain.value = -1.5;
-      this.highShelf.gain.value = 5.0;
+      // Felt Soft Piano: intimate warm wood, silky softened highs, cozy room reverb
+      this.dryGain.gain.value = 0.82;
+      this.wetGain.gain.value = 0.38;
+      this.lowShelf.gain.value = 3.2;
+      this.midPresence.gain.value = -1.5;
+      this.highShelf.gain.value = -4.5;
     } else {
-      // Electric Piano
+      // Rhodes Mk1 Electric Piano
       this.dryGain.gain.value = 0.88;
       this.wetGain.gain.value = 0.28;
-      this.lowShelf.gain.value = 1.5;
-      this.highShelf.gain.value = 2.0;
+      this.lowShelf.gain.value = 2.0;
+      this.midPresence.gain.value = 0.5;
+      this.highShelf.gain.value = 1.8;
     }
   }
 
-  private async preloadSamples(): Promise<void> {
+  private async decodeIntoMap(
+    ctx: AudioContext,
+    url: string,
+    midi: number,
+    target: Map<number, AudioBuffer>,
+  ): Promise<void> {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const arr = await res.arrayBuffer();
+      const decoded = await ctx.decodeAudioData(arr);
+      target.set(midi, decoded);
+    } catch {
+      // Graceful fallback if audio decoding unavailable (e.g. jsdom unit tests)
+    }
+  }
+
+  private async preloadAllLocalSamples(): Promise<void> {
     if (this.loadingStarted || !this.ctx) return;
     this.loadingStarted = true;
     const ctx = this.ctx;
-    await Promise.all(
-      SALAMANDER_SAMPLES.map(async (entry) => {
-        try {
-          const res = await fetch(`./samples/salamander/${entry.file}`);
-          if (!res.ok) return;
-          const arr = await res.arrayBuffer();
-          const decoded = await ctx.decodeAudioData(arr);
-          this.sampleBuffers.set(entry.midi, decoded);
-        } catch {
-          // Graceful fallback to synth if offline cache unavailable
-        }
-      }),
+
+    // 1. Load Salamander (Yamaha C5) + Steinway manifest in parallel
+    const salamanderPromise = Promise.all(
+      SALAMANDER_SAMPLES.map((entry) =>
+        this.decodeIntoMap(ctx, `./samples/salamander/${entry.file}`, entry.midi, this.salamanderBuffers),
+      ),
     );
+
+    let manifest: SteinwayManifest | null = null;
+    try {
+      const res = await fetch('./samples/steinway/manifest.json');
+      if (res.ok) {
+        manifest = (await res.json()) as SteinwayManifest;
+      }
+    } catch {
+      manifest = null;
+    }
+
+    if (manifest) {
+      // 2. Priority load MF + PP first so Steinway Grand & Felt Piano sound gorgeous immediately
+      const loadLayer = async (layer: VelocityLayer) => {
+        const list = manifest?.[layer] ?? [];
+        const map = this.steinwayLayers[layer];
+        // Batch by 6 to keep main thread & mobile audio decoder silky smooth
+        for (let i = 0; i < list.length; i += 6) {
+          await Promise.all(
+            list
+              .slice(i, i + 6)
+              .map((entry) =>
+                this.decodeIntoMap(ctx, `./samples/steinway/${entry.file}`, entry.midi, map),
+              ),
+          );
+        }
+      };
+
+      await Promise.all([salamanderPromise, loadLayer('MF'), loadLayer('PP')]);
+      // 3. Hydrate MP & FF layers seamlessly in background for full 4-layer dynamic realism
+      await loadLayer('MP');
+      await loadLayer('FF');
+    } else {
+      await salamanderPromise;
+    }
   }
 
-  private findClosestSample(midi: number): { baseMidi: number; buffer: AudioBuffer } | null {
-    if (this.sampleBuffers.size === 0) return null;
+  private findClosestInMap(
+    map: Map<number, AudioBuffer>,
+    midi: number,
+  ): { baseMidi: number; buffer: AudioBuffer } | null {
+    if (map.size === 0) return null;
     let bestMidi = -1;
     let bestDist = Infinity;
-    for (const sampleMidi of this.sampleBuffers.keys()) {
+    for (const sampleMidi of map.keys()) {
       const dist = Math.abs(sampleMidi - midi);
       if (dist < bestDist) {
         bestDist = dist;
         bestMidi = sampleMidi;
       }
     }
-    const buffer = this.sampleBuffers.get(bestMidi);
+    const buffer = map.get(bestMidi);
     return buffer ? { baseMidi: bestMidi, buffer } : null;
+  }
+
+  /**
+   * Selects 1 (or 2 crossfaded) velocity layers from our 4 bundled Steinway recordings
+   * (`PP`, `MP`, `MF`, `FF`) so soft passages sound genuinely velvety and forte notes sparkle!
+   */
+  private selectSteinwayLayers(
+    vel: number,
+  ): Array<{ layer: VelocityLayer; gainWeight: number }> {
+    const avail = (l: VelocityLayer) => this.steinwayLayers[l].size > 0;
+    const allLayers: VelocityLayer[] = ['PP', 'MP', 'MF', 'FF'];
+    const order: VelocityLayer[] = allLayers.filter(avail);
+    if (order.length === 0) return [];
+    if (order.length === 1) return [{ layer: order[0], gainWeight: 1 }];
+
+    // Continuous position across loaded layers (0 = softest PP, 1 = loudest FF)
+    const scaled = Math.max(0, Math.min(1, vel)) * (order.length - 1);
+    const lowIdx = Math.floor(scaled);
+    const highIdx = Math.min(order.length - 1, lowIdx + 1);
+    const frac = scaled - lowIdx;
+
+    // Crossfade smoothly only in the central transition band (0.25..0.75) to save polyphony while removing jumps
+    if (lowIdx === highIdx || frac < 0.25) {
+      return [{ layer: order[lowIdx], gainWeight: 1 }];
+    }
+    if (frac > 0.75) {
+      return [{ layer: order[highIdx], gainWeight: 1 }];
+    }
+    const mix = (frac - 0.25) / 0.5;
+    // Equal-power crossfade keeps loudness perfectly smooth across velocity boundaries
+    return [
+      { layer: order[lowIdx], gainWeight: Math.cos(mix * Math.PI * 0.5) },
+      { layer: order[highIdx], gainWeight: Math.sin(mix * Math.PI * 0.5) },
+    ];
   }
 
   setPreset(preset: SoundPreset): void {
@@ -270,13 +350,13 @@ export class PianoSynth implements NotePlayer {
     if (ctx.state === 'suspended') {
       void ctx.resume();
     }
-    const now = startAtAudioTime ?? ctx.currentTime;
+    const now = Math.max(ctx.currentTime + 0.002, startAtAudioTime ?? ctx.currentTime);
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'triangle';
     osc.frequency.setValueAtTime(accent ? 1120 : 800, now);
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.linearRampToValueAtTime(accent ? 0.24 : 0.14, now + 0.003);
+    gain.gain.linearRampToValueAtTime(accent ? 0.22 : 0.13, now + 0.003);
     gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.045);
     osc.connect(gain);
     gain.connect(ctx.destination);
@@ -310,7 +390,7 @@ export class PianoSynth implements NotePlayer {
       this.mutedByStop = false;
     }
 
-    // Prune already-finished voices (critical for smplr voices that have no onended callback!)
+    // Prune already-finished voices
     if (this.voices.length > 0) {
       this.voices = this.voices.filter((v) => v.endTime > audioNow);
     }
@@ -325,69 +405,95 @@ export class PianoSynth implements NotePlayer {
 
     const clamped = clampMidi(midi);
     const baseNow = Math.max(audioNow + 0.002, startAtAudioTime ?? audioNow);
-    const rawVel = Math.max(0.1, Math.min(1, velocity));
-    const holdDur = Math.max(0.1, Math.min(durationSec, 8));
+    const rawVel = Math.max(0.08, Math.min(1, velocity));
+    const holdDur = Math.max(0.12, Math.min(durationSec, 9));
 
-    // Organic chord micro-spread (0..6ms) + subtle dynamic nuance so chords bloom like a human pianist
+    // Organic chord micro-spread (0..5ms) + gentle human velocity micro-nuance
     let humanOffset = 0;
     if (Math.abs(baseNow - this.lastChordTime) < 0.008) {
       this.chordNoteCount = Math.min(8, this.chordNoteCount + 1);
-      humanOffset = this.chordNoteCount * 0.0022 + Math.random() * 0.0018;
+      humanOffset = this.chordNoteCount * 0.0018 + Math.random() * 0.0014;
     } else {
       this.lastChordTime = baseNow;
       this.chordNoteCount = 0;
     }
     const now = baseNow + humanOffset;
     const expressiveVel = Math.max(
-      0.12,
-      Math.min(0.98, Math.pow(rawVel, 1.2) * (0.97 + Math.random() * 0.06)),
+      0.1,
+      Math.min(0.98, Math.pow(rawVel, 1.15) * (0.97 + Math.random() * 0.05)),
     );
 
-    // Electric Piano uses dedicated Rhodes-style FM/tine synthesis
+    // 1. Rhodes Mk1 Electric Piano
     if (this.preset === 'electric') {
       this.playElectricPiano(ctx, clamped, now, holdDur, expressiveVel);
       return;
     }
 
-    // Prefer 4-velocity-layer Steinway Grand (smplr) when loaded; fall back immediately if start() fails
-    if (this.splendidReady && this.splendidPiano) {
-      try {
-        const midiVel = Math.max(18, Math.min(127, Math.round(expressiveVel * 127)));
-        const registerTail = clamped < 52 ? 0.35 : clamped < 72 ? 0.18 : 0.08;
-        const totalDur = holdDur + registerTail;
-        const stopId = `sv-${++this.smplrVoiceSeq}`;
-        const stopFn = this.splendidPiano.start({
-          note: clamped,
-          velocity: midiVel,
-          time: now,
-          duration: totalDur,
-          stopId,
-        });
-        if (typeof stopFn === 'function') {
-          this.voices.push({
-            startTime: now,
-            endTime: now + totalDur + 0.8,
-            stop: () => {
-              try {
-                stopFn(ctx.currentTime);
-              } catch {
-                // ignore
-              }
-            },
-          });
-          return;
+    // 2. Steinway Concert Grand (4-Layer Multi-Velocity Offline)
+    if (this.preset === 'grand') {
+      const picks = this.selectSteinwayLayers(expressiveVel);
+      if (picks.length > 0) {
+        for (const pick of picks) {
+          const sample = this.findClosestInMap(this.steinwayLayers[pick.layer], clamped);
+          if (sample) {
+            this.playSampledPiano(ctx, sample.buffer, sample.baseMidi, clamped, now, holdDur, expressiveVel * pick.gainWeight, {
+              baseRelease: 0.95,
+              attackSec: 0.0025,
+              cutoffMin: 2400,
+              cutoffMax: 17500,
+              gainScale: 1.05,
+            });
+          }
         }
-      } catch {
-        // Fall through seamlessly to offline Salamander / synth fallback
+        return;
       }
     }
 
-    const sample = this.findClosestSample(clamped);
-    if (sample) {
-      this.playSampledPiano(ctx, sample.buffer, sample.baseMidi, clamped, now, holdDur, expressiveVel);
-    } else {
-      this.playFallbackSynth(ctx, clamped, now, holdDur, expressiveVel);
+    // 3. Intimate Felt Soft Piano (uses real Steinway PP soft-hammer recordings + warm felt lowpass)
+    if (this.preset === 'bright') {
+      const ppSample =
+        this.findClosestInMap(this.steinwayLayers.PP, clamped) ??
+        this.findClosestInMap(this.steinwayLayers.MP, clamped) ??
+        this.findClosestInMap(this.salamanderBuffers, clamped);
+      if (ppSample) {
+        this.playSampledPiano(ctx, ppSample.buffer, ppSample.baseMidi, clamped, now, holdDur, expressiveVel, {
+          baseRelease: 1.05,
+          attackSec: 0.008,
+          cutoffMin: 850,
+          cutoffMax: 4400,
+          gainScale: 1.08,
+        });
+        return;
+      }
     }
+
+    // 4. Yamaha C5 Studio (Salamander Grand) — also serves as instant fallback while Steinway decodes
+    const salamander = this.findClosestInMap(this.salamanderBuffers, clamped);
+    if (salamander) {
+      this.playSampledPiano(ctx, salamander.buffer, salamander.baseMidi, clamped, now, holdDur, expressiveVel, {
+        baseRelease: this.preset === 'studio' ? 0.58 : 0.88,
+        attackSec: 0.0025,
+        cutoffMin: 1400,
+        cutoffMax: 16500,
+        gainScale: 0.96,
+      });
+      return;
+    }
+
+    // 5. Fallback Steinway MF if Salamander hasn't finished yet
+    const fallbackSteinway = this.findClosestInMap(this.steinwayLayers.MF, clamped);
+    if (fallbackSteinway) {
+      this.playSampledPiano(ctx, fallbackSteinway.buffer, fallbackSteinway.baseMidi, clamped, now, holdDur, expressiveVel, {
+        baseRelease: 0.9,
+        attackSec: 0.003,
+        cutoffMin: 2000,
+        cutoffMax: 16500,
+        gainScale: 1.0,
+      });
+      return;
+    }
+
+    this.playFallbackSynth(ctx, clamped, now, holdDur, expressiveVel);
   }
 
   private playSampledPiano(
@@ -398,41 +504,51 @@ export class PianoSynth implements NotePlayer {
     now: number,
     holdDur: number,
     vel: number,
+    profile: {
+      baseRelease: number;
+      attackSec: number;
+      cutoffMin: number;
+      cutoffMax: number;
+      gainScale: number;
+    },
   ): void {
     if (!this.lowShelf) return;
     const src = ctx.createBufferSource();
     src.buffer = buffer;
     src.playbackRate.value = Math.pow(2, (targetMidi - baseMidi) / 12);
 
-    // Register-aware natural damper release (bass rings longer, treble decays crisper)
-    const baseRelease = this.preset === 'grand' ? 0.85 : this.preset === 'studio' ? 0.42 : 0.6;
-    const registerFactor = targetMidi < 50 ? 1.35 : targetMidi > 78 ? 0.72 : 1.0;
-    const releaseDur = baseRelease * registerFactor;
+    // Register-aware natural damper release: bass strings resonate longer, high treble decays crisp
+    const registerFactor = targetMidi < 48 ? 1.38 : targetMidi < 60 ? 1.15 : targetMidi > 80 ? 0.65 : 1.0;
+    const releaseDur = profile.baseRelease * registerFactor;
     const endTime = now + holdDur + releaseDur;
 
-    // Velocity-sensitive felt hammer lowpass filter (soft notes = warm/dark, loud notes = bright)
+    // Velocity-sensitive hammer lowpass filter for silky dynamic shading
     const hammerFilter = ctx.createBiquadFilter();
     hammerFilter.type = 'lowpass';
-    const peakCutoff = Math.min(16000, 1100 + Math.pow(vel, 1.8) * 13500);
-    const sustainCutoff = Math.max(850, peakCutoff * 0.52);
+    const peakCutoff = Math.min(
+      profile.cutoffMax,
+      profile.cutoffMin + Math.pow(Math.min(1, vel), 1.55) * (profile.cutoffMax - profile.cutoffMin),
+    );
+    const sustainCutoff = Math.max(700, peakCutoff * 0.58);
     hammerFilter.frequency.setValueAtTime(peakCutoff, now);
-    hammerFilter.frequency.exponentialRampToValueAtTime(sustainCutoff, now + Math.min(holdDur, 1.2));
+    hammerFilter.frequency.exponentialRampToValueAtTime(sustainCutoff, now + Math.min(holdDur, 1.4));
 
     const noteGain = ctx.createGain();
-    // Smooth 3ms de-click attack + natural string decay curve
+    const peakAmp = Math.max(0.002, Math.min(1.15, vel * profile.gainScale));
+    // Smooth de-click attack -> natural string hold -> realistic damper fade
     noteGain.gain.setValueAtTime(0.0001, now);
-    noteGain.gain.linearRampToValueAtTime(Math.max(0.001, vel * 0.92), now + 0.003);
-    noteGain.gain.exponentialRampToValueAtTime(Math.max(0.001, vel * 0.72), now + holdDur);
+    noteGain.gain.linearRampToValueAtTime(peakAmp, now + profile.attackSec);
+    noteGain.gain.exponentialRampToValueAtTime(Math.max(0.001, peakAmp * 0.74), now + holdDur);
     noteGain.gain.exponentialRampToValueAtTime(0.0001, endTime);
 
     src.connect(hammerFilter);
     hammerFilter.connect(noteGain);
 
-    // Natural stereo piano keyboard panning (bass left -> treble right)
+    // Natural stereo concert grand lid panning (bass left -> treble right)
     let panner: StereoPannerNode | null = null;
     if (typeof ctx.createStereoPanner === 'function') {
       panner = ctx.createStereoPanner();
-      panner.pan.value = Math.max(-0.38, Math.min(0.38, ((targetMidi - 60) / 36) * 0.35));
+      panner.pan.value = Math.max(-0.38, Math.min(0.38, ((targetMidi - 60) / 36) * 0.36));
       noteGain.connect(panner);
       panner.connect(this.lowShelf);
     } else {
@@ -483,47 +599,63 @@ export class PianoSynth implements NotePlayer {
   ): void {
     if (!this.lowShelf) return;
     const freq = midiToFrequency(midi);
-    const releaseDur = 0.45;
+    const releaseDur = 0.55;
     const endTime = now + holdDur + releaseDur;
 
     const noteGain = ctx.createGain();
     noteGain.gain.setValueAtTime(0.0001, now);
-    noteGain.gain.linearRampToValueAtTime(vel * 0.48, now + 0.006);
-    noteGain.gain.exponentialRampToValueAtTime(vel * 0.24, now + Math.min(0.45, holdDur));
-    noteGain.gain.setValueAtTime(vel * 0.24, now + holdDur);
+    noteGain.gain.linearRampToValueAtTime(Math.max(0.001, vel * 0.36), now + 0.006);
+    noteGain.gain.exponentialRampToValueAtTime(Math.max(0.001, vel * 0.16), now + holdDur);
     noteGain.gain.exponentialRampToValueAtTime(0.0001, endTime);
-    noteGain.connect(this.lowShelf);
 
-    // Carrier sine + subtle bell tine overtone (7x partial decaying fast)
     const carrier = ctx.createOscillator();
     carrier.type = 'sine';
     carrier.frequency.setValueAtTime(freq, now);
 
-    const tine = ctx.createOscillator();
-    tine.type = 'sine';
-    tine.frequency.setValueAtTime(freq * 7, now);
-    const tineGain = ctx.createGain();
-    tineGain.gain.setValueAtTime(vel * 0.14, now);
-    tineGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
-
+    // Subtle warm 2nd harmonic body
     const body = ctx.createOscillator();
     body.type = 'triangle';
     body.frequency.setValueAtTime(freq * 2, now);
     const bodyGain = ctx.createGain();
-    bodyGain.gain.value = 0.16;
+    bodyGain.gain.setValueAtTime(0.12 * vel, now);
+    bodyGain.gain.exponentialRampToValueAtTime(0.001, now + Math.min(holdDur, 0.9));
 
-    carrier.connect(noteGain);
-    tine.connect(tineGain);
-    tineGain.connect(noteGain);
+    // Classic Rhodes glassy bell tine transient
+    const tine = ctx.createOscillator();
+    tine.type = 'sine';
+    tine.frequency.setValueAtTime(freq * 7, now);
+    const tineGain = ctx.createGain();
+    tineGain.gain.setValueAtTime(0.24 * vel, now);
+    tineGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(Math.min(6200, freq * 8), now);
+    filter.frequency.exponentialRampToValueAtTime(Math.max(900, freq * 2.4), now + Math.min(holdDur, 1.0));
+
+    carrier.connect(filter);
     body.connect(bodyGain);
-    bodyGain.connect(noteGain);
+    bodyGain.connect(filter);
+    tine.connect(tineGain);
+    tineGain.connect(filter);
+    filter.connect(noteGain);
+
+    let panner: StereoPannerNode | null = null;
+    if (typeof ctx.createStereoPanner === 'function') {
+      panner = ctx.createStereoPanner();
+      panner.pan.value = Math.max(-0.32, Math.min(0.32, ((midi - 60) / 36) * 0.3));
+      noteGain.connect(panner);
+      panner.connect(this.lowShelf);
+    } else {
+      noteGain.connect(this.lowShelf);
+    }
 
     carrier.start(now);
-    tine.start(now);
     body.start(now);
+    tine.start(now);
     carrier.stop(endTime + 0.02);
-    tine.stop(now + 0.2);
     body.stop(endTime + 0.02);
+    tine.stop(now + 0.19);
 
     const voice: ActiveVoice = {
       startTime: now,
@@ -539,19 +671,24 @@ export class PianoSynth implements NotePlayer {
             noteGain.gain.cancelScheduledValues(t);
             noteGain.gain.setValueAtTime(cur, t);
           }
-          noteGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
-          carrier.stop(t + 0.06);
-          body.stop(t + 0.06);
+          noteGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+          carrier.stop(t + 0.07);
+          body.stop(t + 0.07);
         } catch {
           // Already stopped
         }
       },
     };
+
     this.voices.push(voice);
     carrier.onended = () => {
       const idx = this.voices.indexOf(voice);
       if (idx >= 0) this.voices.splice(idx, 1);
       noteGain.disconnect();
+      filter.disconnect();
+      bodyGain.disconnect();
+      tineGain.disconnect();
+      panner?.disconnect();
     };
   }
 
@@ -564,21 +701,18 @@ export class PianoSynth implements NotePlayer {
   ): void {
     if (!this.lowShelf) return;
     const freq = midiToFrequency(midi);
-    const releaseDur = 0.35;
-    const endTime = now + holdDur + releaseDur;
+    const endTime = now + holdDur + 0.5;
 
     const noteGain = ctx.createGain();
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(Math.min(10000, freq * (4 + vel * 5)), now);
-    filter.frequency.exponentialRampToValueAtTime(Math.max(400, freq * 2.2), now + holdDur + 0.25);
-
     noteGain.gain.setValueAtTime(0.0001, now);
-    noteGain.gain.linearRampToValueAtTime(vel * 0.42, now + 0.008);
-    noteGain.gain.exponentialRampToValueAtTime(vel * 0.18, now + Math.min(0.4, holdDur));
-    noteGain.gain.setValueAtTime(vel * 0.18, now + holdDur);
+    noteGain.gain.linearRampToValueAtTime(Math.max(0.001, vel * 0.34), now + 0.005);
+    noteGain.gain.exponentialRampToValueAtTime(Math.max(0.001, vel * 0.14), now + holdDur);
     noteGain.gain.exponentialRampToValueAtTime(0.0001, endTime);
 
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(Math.min(7200, freq * 8), now);
+    filter.frequency.exponentialRampToValueAtTime(Math.max(700, freq * 2.2), now + Math.min(holdDur, 0.9));
     filter.connect(noteGain);
     noteGain.connect(this.lowShelf);
 
@@ -641,11 +775,6 @@ export class PianoSynth implements NotePlayer {
       this.masterGain.gain.setValueAtTime(Math.max(0.0001, this.masterGain.gain.value), t);
       this.masterGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.015);
       this.mutedByStop = true;
-    }
-    try {
-      this.splendidPiano?.stop();
-    } catch {
-      // ignore
     }
     const active = this.voices.splice(0);
     for (const v of active) {

@@ -173,12 +173,12 @@ export const TopBar: React.FC<TopBarProps> = ({
 
   const soundShortLabel =
     soundPreset === 'grand'
-      ? 'Grand'
+      ? 'Steinway'
       : soundPreset === 'studio'
-        ? 'Studio'
+        ? 'Yamaha C5'
         : soundPreset === 'bright'
-          ? 'Bright'
-          : 'E-Piano';
+          ? 'Felt'
+          : 'Rhodes';
 
   const maxMeasure = Math.max(1, song.measures.length);
   const midiConnected = midiDevices.length > 0;

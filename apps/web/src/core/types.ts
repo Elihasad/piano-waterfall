@@ -19,6 +19,8 @@ export interface NoteEvent {
   midi: number;
   startTimeSec: number;
   durationSec: number;
+  /** Optional acoustic sustain duration (extended by MIDI CC64 sustain pedal without cluttering visual bars). */
+  sustainSec?: number;
   velocity: number;
   hand: Hand;
   measureNumber: number;

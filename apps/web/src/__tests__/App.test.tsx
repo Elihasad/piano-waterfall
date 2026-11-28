@@ -35,10 +35,10 @@ describe('App integration', () => {
     fireEvent.click(practiceBtn);
     expect(practiceBtn).toHaveTextContent('Wait (MIDI)');
 
-    // Open Sound Preset popover and switch to Studio Piano
+    // Open Sound Preset popover and switch to Yamaha C5 Studio
     fireEvent.click(screen.getByRole('button', { name: /Piano Sound/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Studio Piano/i }));
-    expect(screen.getByRole('button', { name: /Piano Sound/i })).toHaveTextContent('Studio');
+    fireEvent.click(screen.getByRole('button', { name: /Yamaha C5 Studio/i }));
+    expect(screen.getByRole('button', { name: /Piano Sound/i })).toHaveTextContent('Yamaha C5');
 
     // Open Hands popover and toggle Right Hand audio mute independently of visual
     fireEvent.click(screen.getByRole('button', { name: /Left \/ Right Hand/i }));

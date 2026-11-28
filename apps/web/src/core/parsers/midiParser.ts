@@ -53,6 +53,40 @@ export function parseMidiBuffer(buffer: ArrayBuffer, fallbackTitle: string): Son
     }
   }
 
+  // Extract MIDI Sustain Pedal (CC64) intervals across all tracks so piano rings with real legato resonance!
+  const pedalEvents: Array<{ time: number; down: boolean }> = [];
+  for (const track of midi.tracks) {
+    const cc64 = track.controlChanges?.[64];
+    if (!cc64 || cc64.length === 0) continue;
+    for (const ev of cc64) {
+      pedalEvents.push({ time: Math.max(0, ev.time), down: ev.value >= 0.5 });
+    }
+  }
+  pedalEvents.sort((a, b) => a.time - b.time);
+
+  const pedalIntervals: Array<{ start: number; end: number }> = [];
+  let pedalDownAt: number | null = null;
+  for (const ev of pedalEvents) {
+    if (ev.down && pedalDownAt === null) {
+      pedalDownAt = ev.time;
+    } else if (!ev.down && pedalDownAt !== null) {
+      if (ev.time > pedalDownAt) {
+        pedalIntervals.push({ start: pedalDownAt, end: ev.time });
+      }
+      pedalDownAt = null;
+    }
+  }
+
+  const findPedalRelease = (noteEnd: number): number | null => {
+    for (const iv of pedalIntervals) {
+      if (iv.start > noteEnd) break;
+      if (noteEnd >= iv.start - 0.02 && noteEnd <= iv.end) {
+        return iv.end;
+      }
+    }
+    return null;
+  };
+
   const notes: NoteEvent[] = [];
   let noteCounter = 0;
 
@@ -64,12 +98,19 @@ export function parseMidiBuffer(buffer: ArrayBuffer, fallbackTitle: string): Son
         assignedTrackHand === 'split' ? (clamped < 60 ? 'left' : 'right') : assignedTrackHand;
       const startTimeSec = Math.max(0, n.time);
       const durationSec = Math.max(0.05, n.duration);
+      const noteEnd = startTimeSec + durationSec;
+      const pedalUp = pedalIntervals.length > 0 ? findPedalRelease(noteEnd) : null;
+      const sustainSec =
+        pedalUp !== null && pedalUp > noteEnd
+          ? Math.min(durationSec + 4.5, pedalUp - startTimeSec)
+          : undefined;
       const measureNumber = Math.floor(startTimeSec / measureDurationSec) + 1;
       notes.push({
         id: `m-${noteCounter++}`,
         midi: clamped,
         startTimeSec,
         durationSec,
+        ...(sustainSec !== undefined ? { sustainSec } : {}),
         velocity: Math.max(0.1, Math.min(1, n.velocity || 0.8)),
         hand,
         measureNumber,
@@ -78,6 +119,21 @@ export function parseMidiBuffer(buffer: ArrayBuffer, fallbackTitle: string): Son
   });
 
   normalizeHandSeparation(notes);
+
+  // Prevent pedal sustain from overlapping past the next re-strike of the exact same key
+  if (pedalIntervals.length > 0) {
+    const lastByMidi = new Map<number, NoteEvent>();
+    for (const note of notes) {
+      const prev = lastByMidi.get(note.midi);
+      if (prev && prev.sustainSec !== undefined) {
+        const maxAllowed = Math.max(prev.durationSec, note.startTimeSec - prev.startTimeSec - 0.015);
+        if (prev.sustainSec > maxAllowed) {
+          prev.sustainSec = maxAllowed;
+        }
+      }
+      lastByMidi.set(note.midi, note);
+    }
+  }
 
   const lastEnd = notes.reduce((acc, n) => Math.max(acc, n.startTimeSec + n.durationSec), 0);
   const totalMeasures = Math.max(1, Math.ceil(lastEnd / measureDurationSec));
